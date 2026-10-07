@@ -36,6 +36,25 @@ static class Native
     [DllImport("user32.dll")]
     public static extern uint MapVirtualKey(uint code, uint mapType);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    /// <summary>Barre de titre sombre (Windows 10 20H1 et plus récent ; ignoré ailleurs).</summary>
+    public static void UseDarkTitleBar(IntPtr hwnd)
+    {
+        int on = 1;
+        DwmSetWindowAttribute(hwnd, 20, ref on, sizeof(int));
+    }
+
+    /// <summary>Nom lisible d'une touche selon la disposition du clavier (ex. « ; » plutôt que « OemSemicolon »).</summary>
+    public static string KeyName(KeyBinding key)
+    {
+        uint vk = MapVirtualKey(key.ScanCode, 1);
+        uint ch = vk == 0 ? 0 : MapVirtualKey(vk, 2) & 0x7FFF;
+        if (ch > ' ') return char.ToUpperInvariant((char)ch).ToString();
+        return key.Name;
+    }
+
     public static void TapKey(KeyBinding key, int holdMs = 40)
     {
         uint flags = KeyScanCode | (key.Extended ? KeyExtended : 0);

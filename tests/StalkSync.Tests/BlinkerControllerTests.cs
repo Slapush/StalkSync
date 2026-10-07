@@ -3,12 +3,6 @@ using Xunit;
 
 public class BlinkerControllerTests
 {
-    private static GameState Game(Side active = Side.Off, bool lit = false, float steer = 0, bool paused = false, bool hazard = false) =>
-        new(true, paused, active == Side.Left, active == Side.Right,
-            lit && active == Side.Left, lit && active == Side.Right, hazard, steer);
-
-    private static readonly GameState NoTelemetry = default;
-
     private static BlinkerController Make(StalkMode mode, Action<BlinkerSettings>? tweak = null)
     {
         var s = new BlinkerSettings { Mode = mode };
@@ -20,83 +14,74 @@ public class BlinkerControllerTests
     public void Latching_follows_stalk_position()
     {
         var c = Make(StalkMode.Latching);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, Game(), true));
-        Assert.Equal(BlinkerAction.None, c.Update(500, true, false, Game(Side.Left), true));
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(2000, false, false, Game(Side.Left), true));
-        Assert.Equal(BlinkerAction.None, c.Update(2500, false, false, Game(), true));
-    }
-
-    [Fact]
-    public void Does_not_tap_twice_while_telemetry_lags()
-    {
-        var c = Make(StalkMode.Latching);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, Game(), true));
-        Assert.Equal(BlinkerAction.None, c.Update(100, true, false, Game(), true));
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(400, true, false, Game(), true));
-    }
-
-    [Fact]
-    public void Latching_reasserts_when_game_cancels()
-    {
-        var c = Make(StalkMode.Latching);
-        c.Update(0, true, false, Game(), true);
-        c.Update(500, true, false, Game(Side.Left), true);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(5000, true, false, Game(), true));
-    }
-
-    [Fact]
-    public void Does_not_fight_keyboard_when_stalk_is_centered()
-    {
-        var c = Make(StalkMode.Latching);
-        Assert.Equal(BlinkerAction.None, c.Update(0, false, false, Game(Side.Right), true));
-        Assert.Equal(BlinkerAction.None, c.Update(1000, false, false, Game(Side.Right), true));
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, true));
+        Assert.Equal(BlinkerAction.None, c.Update(1000, true, false, true));
+        Assert.Equal(Side.Left, c.Assumed);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(2000, false, false, true));
+        Assert.Equal(BlinkerAction.None, c.Update(3000, false, false, true));
+        Assert.Equal(Side.Off, c.Assumed);
     }
 
     [Fact]
     public void Switches_side_directly()
     {
         var c = Make(StalkMode.Latching);
-        c.Update(0, true, false, Game(), true);
-        c.Update(1000, true, false, Game(Side.Left), true);
-        Assert.Equal(BlinkerAction.TapRight, c.Update(2000, false, true, Game(Side.Left), true));
+        c.Update(0, true, false, true);
+        Assert.Equal(BlinkerAction.TapRight, c.Update(2000, false, true, true));
+        Assert.Equal(Side.Right, c.Assumed);
+    }
+
+    [Fact]
+    public void Waits_for_game_focus_then_catches_up()
+    {
+        var c = Make(StalkMode.Latching);
+        Assert.Equal(BlinkerAction.None, c.Update(0, true, false, false));
+        Assert.Equal(Side.Off, c.Assumed);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(100, true, false, true));
+    }
+
+    [Fact]
+    public void Respects_cooldown_between_taps()
+    {
+        var c = Make(StalkMode.Latching);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, true));
+        Assert.Equal(BlinkerAction.None, c.Update(100, false, true, true));
+        Assert.Equal(BlinkerAction.TapRight, c.Update(400, false, true, true));
     }
 
     [Theory]
     [InlineData(StalkMode.Latching)]
     [InlineData(StalkMode.Momentary)]
-    public void Short_press_gives_three_blinks(StalkMode mode)
+    public void Short_press_gives_comfort_blinks(StalkMode mode)
     {
         var c = Make(mode);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, Game(), true));
-        Assert.Equal(BlinkerAction.None, c.Update(200, false, false, Game(Side.Left), true));
-        long t = 300;
-        for (int i = 0; i < 3; i++)
-        {
-            Assert.Equal(BlinkerAction.None, c.Update(t, false, false, Game(Side.Left, lit: true), true));
-            t += 350;
-            var a = c.Update(t, false, false, Game(Side.Left), true);
-            t += 350;
-            Assert.Equal(i == 2 ? BlinkerAction.TapLeft : BlinkerAction.None, a);
-        }
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, true));
+        Assert.Equal(BlinkerAction.None, c.Update(200, false, false, true));
+        Assert.True(c.ComfortActive);
+        Assert.Equal(BlinkerAction.None, c.Update(2000, false, false, true));
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(2200, false, false, true));
+        Assert.Equal(Side.Off, c.Desired);
+        Assert.Equal(Side.Off, c.Assumed);
+    }
+
+    [Fact]
+    public void Comfort_disabled_short_press_turns_off()
+    {
+        var c = Make(StalkMode.Latching, s => s.ComfortEnabled = false);
+        c.Update(0, true, false, true);
+        c.Update(200, false, false, true);
         Assert.Equal(Side.Off, c.Desired);
     }
 
     [Fact]
     public void Latching_full_press_through_half_position_stays_on()
     {
-        // Mi-course puis à fond : le commodo change de bouton et retombe un instant au centre.
+        // Mi-course puis à fond : le commodo peut retomber un instant au centre.
         var c = Make(StalkMode.Latching);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, Game(), true));
-        c.Update(60, false, false, Game(Side.Left), true);
-        c.Update(90, true, false, Game(Side.Left), true);
-        long t = 300;
-        for (int i = 0; i < 10; i++)
-        {
-            Assert.Equal(BlinkerAction.None, c.Update(t, true, false, Game(Side.Left, lit: true), true));
-            t += 350;
-            Assert.Equal(BlinkerAction.None, c.Update(t, true, false, Game(Side.Left), true));
-            t += 350;
-        }
+        c.Update(0, true, false, true);
+        c.Update(60, false, false, true);
+        c.Update(90, true, false, true);
+        Assert.Equal(BlinkerAction.None, c.Update(10_000, true, false, true));
         Assert.Equal(Side.Left, c.Desired);
         Assert.False(c.ComfortActive);
     }
@@ -105,64 +90,19 @@ public class BlinkerControllerTests
     public void Momentary_long_press_latches_then_second_press_cancels()
     {
         var c = Make(StalkMode.Momentary);
-        Assert.Equal(BlinkerAction.TapRight, c.Update(0, false, true, Game(), true));
-        c.Update(800, false, false, Game(Side.Right), true);
-        Assert.Equal(BlinkerAction.None, c.Update(10_000, false, false, Game(Side.Right), true));
-        Assert.Equal(BlinkerAction.TapRight, c.Update(11_000, false, true, Game(Side.Right), true));
-        Assert.Equal(BlinkerAction.None, c.Update(11_100, false, false, Game(Side.Right), true));
-        Assert.Equal(BlinkerAction.None, c.Update(12_000, false, false, Game(), true));
+        Assert.Equal(BlinkerAction.TapRight, c.Update(0, false, true, true));
+        c.Update(800, false, false, true);
+        Assert.Equal(BlinkerAction.None, c.Update(10_000, false, false, true));
+        Assert.Equal(BlinkerAction.TapRight, c.Update(11_000, false, true, true));
+        Assert.Equal(BlinkerAction.None, c.Update(11_100, false, false, true));
         Assert.Equal(Side.Off, c.Desired);
     }
 
     [Fact]
-    public void Momentary_cancels_after_the_turn()
+    public void Keeps_assumed_state_when_recreated()
     {
-        var c = Make(StalkMode.Momentary);
-        c.Update(0, true, false, Game(), true);
-        c.Update(800, false, false, Game(Side.Left), true);
-        Assert.Equal(BlinkerAction.None, c.Update(2000, false, false, Game(Side.Left, steer: 0.5f), true));
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(4000, false, false, Game(Side.Left, steer: 0.01f), true));
-    }
-
-    [Fact]
-    public void Momentary_steering_the_other_way_does_not_cancel()
-    {
-        var c = Make(StalkMode.Momentary);
-        c.Update(0, true, false, Game(), true);
-        c.Update(800, false, false, Game(Side.Left), true);
-        c.Update(2000, false, false, Game(Side.Left, steer: -0.5f), true);
-        Assert.Equal(BlinkerAction.None, c.Update(4000, false, false, Game(Side.Left), true));
-        Assert.Equal(Side.Left, c.Desired);
-    }
-
-    [Fact]
-    public void Momentary_follows_game_side_cancel()
-    {
-        var c = Make(StalkMode.Momentary, s => s.AutoCancelEnabled = false);
-        c.Update(0, true, false, Game(), true);
-        c.Update(800, false, false, Game(Side.Left), true);
-        Assert.Equal(BlinkerAction.None, c.Update(5000, false, false, Game(), true));
-        Assert.Equal(Side.Off, c.Desired);
-    }
-
-    [Fact]
-    public void Works_without_telemetry()
-    {
-        var c = Make(StalkMode.Latching);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, NoTelemetry, true));
-        Assert.Equal(BlinkerAction.None, c.Update(1000, true, false, NoTelemetry, true));
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(2000, false, false, NoTelemetry, true));
-        Assert.Equal(BlinkerAction.None, c.Update(3000, false, false, NoTelemetry, true));
-    }
-
-    [Fact]
-    public void Sends_nothing_when_paused_hazard_or_game_not_focused()
-    {
-        var c = Make(StalkMode.Latching);
-        Assert.Equal(BlinkerAction.None, c.Update(0, true, false, Game(paused: true), true));
-        Assert.Equal(BlinkerAction.None, c.Update(10, true, false, Game(hazard: true), true));
-        Assert.Equal(BlinkerAction.None, c.Update(20, true, false, Game(), false));
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(30, true, false, Game(), true));
+        var c = new BlinkerController(new BlinkerSettings(), Side.Left);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, false, false, true));
     }
 
     [Fact]
@@ -178,22 +118,22 @@ public class BlinkerControllerTests
         Assert.Equal(Side.Off, p.Update(false, false, false));
     }
 
+    private static BlinkerAction Step(BlinkerController c, PulseStalk p, long t, bool left, bool center)
+    {
+        var pos = p.Update(left, false, center);
+        return c.Update(t, pos == Side.Left, pos == Side.Right, true);
+    }
+
     [Fact]
     public void Positions_mode_full_press_stays_until_center_pulse()
     {
         var c = Make(StalkMode.Positions);
         var p = new PulseStalk();
-        BlinkerAction Step(long t, bool l, bool center, GameState g)
-        {
-            var pos = p.Update(l, false, center);
-            return c.Update(t, pos == Side.Left, pos == Side.Right, g, true);
-        }
-        Assert.Equal(BlinkerAction.TapLeft, Step(0, true, false, Game()));
-        Step(150, false, false, Game(Side.Left));
-        Assert.Equal(BlinkerAction.None, Step(10_000, false, false, Game(Side.Left)));
+        Assert.Equal(BlinkerAction.TapLeft, Step(c, p, 0, true, false));
+        Step(c, p, 150, false, false);
+        Assert.Equal(BlinkerAction.None, Step(c, p, 10_000, false, false));
         Assert.Equal(Side.Left, c.Desired);
-        Assert.Equal(BlinkerAction.TapLeft, Step(10_100, false, true, Game(Side.Left)));
-        Assert.Equal(BlinkerAction.None, Step(10_250, false, false, Game()));
+        Assert.Equal(BlinkerAction.TapLeft, Step(c, p, 10_100, false, true));
         Assert.Equal(Side.Off, c.Desired);
     }
 
@@ -202,9 +142,9 @@ public class BlinkerControllerTests
     {
         var c = Make(StalkMode.Positions);
         var p = new PulseStalk();
-        c.Update(0, p.Update(true, false, false) == Side.Left, false, Game(), true);
-        c.Update(150, p.Update(false, false, false) == Side.Left, false, Game(Side.Left), true);
-        c.Update(250, p.Update(false, false, true) == Side.Left, false, Game(Side.Left), true);
+        Step(c, p, 0, true, false);
+        Step(c, p, 150, false, false);
+        Step(c, p, 250, false, true);
         Assert.True(c.ComfortActive);
         Assert.Equal(Side.Left, c.Desired);
     }

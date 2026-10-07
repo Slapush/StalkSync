@@ -4,16 +4,14 @@ using StalkSync.Core;
 namespace StalkSync;
 
 public sealed record EngineStatus(
-    GameState Game, uint GameId, float SpeedKmh, bool GameFocused,
-    bool LeftPressed, bool RightPressed, bool LeftFound, bool RightFound,
-    Side Desired, bool Comfort, int Devices, string LastAction);
+    bool GameFocused, Side Stalk, bool LeftFound, bool RightFound, bool CenterFound,
+    Side Desired, Side Assumed, bool Comfort, int Devices, string LastAction);
 
-/// <summary>Boucle de fond : lit le commodo et la télémétrie, puis envoie les touches nécessaires.</summary>
+/// <summary>Boucle de fond : lit le commodo, puis envoie les touches nécessaires.</summary>
 public sealed class Engine : IDisposable
 {
     private readonly Config _config;
     private readonly StalkInput _input;
-    private readonly TelemetryReader _telemetry = new();
     private readonly Thread _thread;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private volatile bool _running = true;
@@ -49,7 +47,7 @@ public sealed class Engine : IDisposable
     public void CancelDetect() => _detect = null;
 
     /// <summary>À appeler après un changement de réglages : repart d'un état propre.</summary>
-    public void ResetController() => _controller = new BlinkerController(_config.Blinker);
+    public void ResetController() => _controller = new BlinkerController(_config.Blinker, _controller.Assumed);
 
     private void Loop()
     {
@@ -115,26 +113,26 @@ public sealed class Engine : IDisposable
 
         bool left = IsPressed(devices, _config.StalkLeft, out bool leftFound);
         bool right = IsPressed(devices, _config.StalkRight, out bool rightFound);
+        bool center = IsPressed(devices, _config.StalkCenter, out bool centerFound);
         if (_config.Blinker.Mode == StalkMode.Positions)
         {
-            var position = _pulse.Update(left, right, IsPressed(devices, _config.StalkCenter, out _));
+            var position = _pulse.Update(left, right, center);
             left = position == Side.Left;
             right = position == Side.Right;
         }
-        var game = _telemetry.Read(now);
         bool focused = Native.GameHasFocus();
 
         var controller = _controller;
-        var action = controller.Update(now, left, right, game, focused);
+        var action = controller.Update(now, left, right, focused);
         if (action != BlinkerAction.None)
         {
             Native.TapKey(action == BlinkerAction.TapLeft ? _config.KeyLeft : _config.KeyRight);
             _lastAction = $"{DateTime.Now:HH:mm:ss} touche {(action == BlinkerAction.TapLeft ? "gauche" : "droite")}";
         }
 
-        Status = new EngineStatus(game, _telemetry.Game, _telemetry.SpeedKmh, focused,
-            left, right, leftFound, rightFound, controller.Desired, controller.ComfortActive,
-            devices.Count, _lastAction);
+        var stalk = left == right ? Side.Off : left ? Side.Left : Side.Right;
+        Status = new EngineStatus(focused, stalk, leftFound, rightFound, centerFound,
+            controller.Desired, controller.Assumed, controller.ComfortActive, devices.Count, _lastAction);
     }
 
     private static bool IsPressed(Dictionary<Guid, (string Name, bool[] Buttons)> devices, ButtonBinding? b, out bool found)
@@ -150,6 +148,5 @@ public sealed class Engine : IDisposable
         _running = false;
         _thread.Join(500);
         _input.Dispose();
-        _telemetry.Dispose();
     }
 }
