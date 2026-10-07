@@ -3,8 +3,9 @@ using StalkSync.Core;
 
 namespace StalkSync;
 
+/// <param name="Game">Jeu au premier plan, ou null.</param>
 public sealed record EngineStatus(
-    bool GameFocused, Side Stalk, bool LeftFound, bool RightFound, bool CenterFound,
+    GameProfile? Game, Side Stalk, bool LeftFound, bool RightFound, bool CenterFound,
     Side Desired, Side Assumed, bool Comfort, int Devices, string LastAction);
 
 /// <summary>Boucle de fond : lit le commodo, puis envoie les touches nécessaires.</summary>
@@ -15,7 +16,10 @@ public sealed class Engine : IDisposable
     private readonly Thread _thread;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private volatile bool _running = true;
-    private BlinkerController _controller;
+    // Un contrôleur par jeu : chacun retient l'état du clignotant dans son jeu.
+    private readonly Dictionary<GameProfile, BlinkerController> _controllers = new();
+    private volatile bool _reset;
+    private GameProfile? _lastGame;
     private readonly PulseStalk _pulse = new();
     private string _lastAction = "—";
 
@@ -31,7 +35,6 @@ public sealed class Engine : IDisposable
     {
         _config = config;
         _input = new StalkInput(hwnd);
-        _controller = new BlinkerController(config.Blinker);
         _thread = new Thread(Loop) { IsBackground = true, Name = "StalkSync" };
         _thread.Start();
     }
@@ -47,7 +50,14 @@ public sealed class Engine : IDisposable
     public void CancelDetect() => _detect = null;
 
     /// <summary>À appeler après un changement de réglages : repart d'un état propre.</summary>
-    public void ResetController() => _controller = new BlinkerController(_config.Blinker, _controller.Assumed);
+    public void ResetController() => _reset = true;
+
+    private BlinkerController ControllerFor(GameProfile game)
+    {
+        if (!_controllers.TryGetValue(game, out var c))
+            _controllers[game] = c = new BlinkerController(_config.Blinker);
+        return c;
+    }
 
     private void Loop()
     {
@@ -120,19 +130,35 @@ public sealed class Engine : IDisposable
             left = position == Side.Left;
             right = position == Side.Right;
         }
-        bool focused = Native.GameHasFocus();
-
-        var controller = _controller;
-        var action = controller.Update(now, left, right, focused);
-        if (action != BlinkerAction.None)
+        // L'interface remplace la liste au lieu de la modifier : on lit une référence stable.
+        var games = _config.Games;
+        if (_reset)
         {
-            Native.TapKey(action == BlinkerAction.TapLeft ? _config.KeyLeft : _config.KeyRight);
-            _lastAction = $"{DateTime.Now:HH:mm:ss} touche {(action == BlinkerAction.TapLeft ? "gauche" : "droite")}";
+            _reset = false;
+            foreach (var (game, c) in _controllers.ToList())
+                _controllers[game] = new BlinkerController(_config.Blinker, c.Assumed);
+        }
+        foreach (var gone in _controllers.Keys.Where(g => !games.Contains(g)).ToList())
+            _controllers.Remove(gone);
+
+        var process = Native.ForegroundProcess();
+        GameProfile? focused = process == null ? null
+            : games.FirstOrDefault(g => g.Enabled && g.Processes.Any(p => p.Equals(process, StringComparison.OrdinalIgnoreCase)));
+        if (focused != null) _lastGame = focused;
+
+        // Tous les jeux suivent le commodo, mais seul celui au premier plan reçoit des touches.
+        foreach (var game in games)
+        {
+            var action = ControllerFor(game).Update(now, left, right, game == focused && game.Ready);
+            if (action == BlinkerAction.None) continue;
+            Native.TapKey(action == BlinkerAction.TapLeft ? game.KeyLeft! : game.KeyRight!);
+            _lastAction = $"{DateTime.Now:HH:mm:ss} {(action == BlinkerAction.TapLeft ? "gauche" : "droite")} → {game.Name}";
         }
 
+        var shown = ControllerFor(_lastGame is { } last && games.Contains(last) ? last : games[0]);
         var stalk = left == right ? Side.Off : left ? Side.Left : Side.Right;
         Status = new EngineStatus(focused, stalk, leftFound, rightFound, centerFound,
-            controller.Desired, controller.Assumed, controller.ComfortActive, devices.Count, _lastAction);
+            shown.Desired, shown.Assumed, shown.ComfortActive, devices.Count, _lastAction);
     }
 
     private static bool IsPressed(Dictionary<Guid, (string Name, bool[] Buttons)> devices, ButtonBinding? b, out bool found)

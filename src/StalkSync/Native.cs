@@ -46,21 +46,40 @@ static class Native
         DwmSetWindowAttribute(hwnd, 20, ref on, sizeof(int));
     }
 
-    /// <summary>Nom lisible d'une touche selon la disposition du clavier (ex. « ; » plutôt que « OemSemicolon »).</summary>
+    private static readonly Dictionary<string, string> PrettyNames = new()
+    {
+        ["Left"] = "←", ["Right"] = "→", ["Up"] = "↑", ["Down"] = "↓", ["Space"] = "Espace",
+        ["Return"] = "Entrée", ["Back"] = "Retour arrière", ["Delete"] = "Suppr", ["Insert"] = "Inser",
+        ["Home"] = "Début", ["End"] = "Fin", ["PageUp"] = "Page préc.", ["Next"] = "Page suiv.",
+    };
+
+    /// <summary>Nom lisible d'une touche selon la disposition du clavier (ex. « Alt + ; » plutôt que « OemSemicolon »).</summary>
     public static string KeyName(KeyBinding key)
     {
-        uint vk = MapVirtualKey(key.ScanCode, 1);
+        uint vk = key.Extended ? 0 : MapVirtualKey(key.ScanCode, 1);
         uint ch = vk == 0 ? 0 : MapVirtualKey(vk, 2) & 0x7FFF;
-        if (ch > ' ') return char.ToUpperInvariant((char)ch).ToString();
-        return key.Name;
+        string name = ch > ' ' ? char.ToUpperInvariant((char)ch).ToString()
+                    : PrettyNames.GetValueOrDefault(key.Name, key.Name);
+        if (key.Shift) name = "Maj + " + name;
+        if (key.Alt) name = "Alt + " + name;
+        if (key.Ctrl) name = "Ctrl + " + name;
+        return name;
     }
+
+    private const ushort ScanCtrl = 0x1D, ScanShift = 0x2A, ScanAlt = 0x38;
 
     public static void TapKey(KeyBinding key, int holdMs = 40)
     {
+        var modifiers = new List<ushort>();
+        if (key.Ctrl) modifiers.Add(ScanCtrl);
+        if (key.Shift) modifiers.Add(ScanShift);
+        if (key.Alt) modifiers.Add(ScanAlt);
+        foreach (var m in modifiers) Send(m, KeyScanCode);
         uint flags = KeyScanCode | (key.Extended ? KeyExtended : 0);
         Send(key.ScanCode, flags);
         Thread.Sleep(holdMs);
         Send(key.ScanCode, flags | KeyUp);
+        for (int i = modifiers.Count - 1; i >= 0; i--) Send(modifiers[i], KeyScanCode | KeyUp);
     }
 
     private static void Send(ushort scan, uint flags)
@@ -70,24 +89,44 @@ static class Native
     }
 
     private static IntPtr _lastHwnd;
-    private static bool _lastIsGame;
+    private static string? _lastProcess;
 
-    /// <summary>Vrai si la fenêtre active est ETS2 ou ATS : on n'envoie jamais de touche ailleurs.</summary>
-    public static bool GameHasFocus()
+    /// <summary>Nom du processus de la fenêtre active (sans « .exe »), ou null.</summary>
+    public static string? ForegroundProcess()
     {
         var hwnd = GetForegroundWindow();
-        if (hwnd == _lastHwnd) return _lastIsGame;
+        if (hwnd == _lastHwnd) return _lastProcess;
         _lastHwnd = hwnd;
-        _lastIsGame = false;
-        if (hwnd == IntPtr.Zero) return false;
+        _lastProcess = null;
+        if (hwnd == IntPtr.Zero) return null;
         GetWindowThreadProcessId(hwnd, out uint pid);
         try
         {
             using var p = Process.GetProcessById((int)pid);
-            _lastIsGame = p.ProcessName.Equals("eurotrucks2", StringComparison.OrdinalIgnoreCase)
-                       || p.ProcessName.Equals("amtrucks", StringComparison.OrdinalIgnoreCase);
+            _lastProcess = p.ProcessName;
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException) { }
-        return _lastIsGame;
+        return _lastProcess;
+    }
+
+    /// <summary>Processus ouverts qui ont une fenêtre, pour ajouter un jeu à la liste.</summary>
+    public static List<(string Process, string Title)> WindowedProcesses()
+    {
+        var own = Environment.ProcessId;
+        var result = new List<(string, string)>();
+        foreach (var p in Process.GetProcesses())
+        {
+            using (p)
+            {
+                try
+                {
+                    if (p.Id == own || p.MainWindowHandle == IntPtr.Zero || string.IsNullOrWhiteSpace(p.MainWindowTitle))
+                        continue;
+                    result.Add((p.ProcessName, p.MainWindowTitle));
+                }
+                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            }
+        }
+        return result.OrderBy(r => r.Item2, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 }

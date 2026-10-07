@@ -19,7 +19,24 @@ public sealed class KeyBinding
 {
     public ushort ScanCode { get; set; }
     public bool Extended { get; set; }
+    public bool Ctrl { get; set; }
+    public bool Alt { get; set; }
+    public bool Shift { get; set; }
     public string Name { get; set; } = "";
+}
+
+/// <summary>Un jeu reconnu par le nom de son processus, avec ses touches de clignotant.</summary>
+public sealed class GameProfile
+{
+    public string Name { get; set; } = "";
+    /// <summary>Noms de processus, sans « .exe ».</summary>
+    public string[] Processes { get; set; } = [];
+    public bool Enabled { get; set; } = true;
+    public bool Builtin { get; set; }
+    public KeyBinding? KeyLeft { get; set; }
+    public KeyBinding? KeyRight { get; set; }
+
+    [JsonIgnore] public bool Ready => Enabled && KeyLeft != null && KeyRight != null;
 }
 
 public sealed class Config
@@ -28,11 +45,13 @@ public sealed class Config
     public ButtonBinding? StalkRight { get; set; }
     /// <summary>Bouton de la position centrale, utilisé seulement par le type <see cref="StalkMode.Positions"/>.</summary>
     public ButtonBinding? StalkCenter { get; set; }
-    // Touches par défaut d'ETS2/ATS pour les clignotants : [ et ] (position physique, clavier US).
-    public KeyBinding KeyLeft { get; set; } = new() { ScanCode = 0x1A, Name = "[" };
-    public KeyBinding KeyRight { get; set; } = new() { ScanCode = 0x1B, Name = "]" };
+    public List<GameProfile> Games { get; set; } = [];
     public BlinkerSettings Blinker { get; set; } = new();
     public bool StartMinimized { get; set; }
+
+    // Anciennes versions : touches uniques pour ETS2 / ATS, reprises dans leur profil au chargement.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public KeyBinding? KeyLeft { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public KeyBinding? KeyRight { get; set; }
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StalkSync", "config.json");
@@ -41,13 +60,16 @@ public sealed class Config
 
     public static Config Load()
     {
+        Config? config = null;
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<Config>(File.ReadAllText(FilePath)) ?? new Config();
+                config = JsonSerializer.Deserialize<Config>(File.ReadAllText(FilePath));
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
-        return new Config();
+        config ??= new Config();
+        config.AddMissingGames();
+        return config;
     }
 
     public void Save()
@@ -55,4 +77,76 @@ public sealed class Config
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Json));
     }
+
+    private void AddMissingGames()
+    {
+        foreach (var game in BuiltinGames())
+        {
+            var existing = Games.Find(g => g.Builtin && g.Name == game.Name);
+            if (existing == null)
+                Games.Add(game);
+            else
+                existing.Processes = game.Processes;
+        }
+        if (KeyLeft != null && KeyRight != null)
+        {
+            var trucks = Games.First(g => g.Name == TrucksName);
+            (trucks.KeyLeft, trucks.KeyRight) = (KeyLeft, KeyRight);
+        }
+        KeyLeft = KeyRight = null;
+    }
+
+    private const string TrucksName = "Euro Truck Simulator 2 / American Truck Simulator";
+
+    /// <summary>Nom court pour l'en-tête.</summary>
+    public static string ShortName(GameProfile game) => game.Name switch
+    {
+        TrucksName => "ETS2 / ATS",
+        "Assetto Corsa Competizione" => "ACC",
+        _ => game.Name,
+    };
+
+    /// <summary>Notes affichées sous les touches de chaque jeu intégré.</summary>
+    public static string Hint(GameProfile game) => game.Name switch
+    {
+        TrucksName => "Mêmes touches que dans Options → Touches. Retire le commodo des clignotants du jeu "
+                    + "et désactive leur extinction automatique.",
+        "BeamNG.drive" => "Mêmes touches que dans Options → Contrôles (par défaut , et .). "
+                        + "Retire le commodo des clignotants du jeu.",
+        "Assetto Corsa" => "Les clignotants viennent de Custom Shaders Patch : assigne-leur une touche "
+                         + "dans les commandes (Content Manager), puis la même ici.",
+        "Assetto Corsa Competizione" => "Mêmes touches que dans Options → Commandes (par défaut Alt + ← et Alt + →).",
+        _ => "Indique les touches de clignotant réglées dans le jeu, et retire le commodo des clignotants du jeu.",
+    };
+
+    private static IEnumerable<GameProfile> BuiltinGames()
+    {
+        // ETS2 / ATS : [ et ] par position physique (clavier US), comme le jeu.
+        yield return new GameProfile
+        {
+            Name = TrucksName, Builtin = true, Processes = ["eurotrucks2", "amtrucks"],
+            KeyLeft = new() { ScanCode = 0x1A, Name = "[" },
+            KeyRight = new() { ScanCode = 0x1B, Name = "]" },
+        };
+        // BeamNG : virgule et point selon la disposition du clavier.
+        yield return new GameProfile
+        {
+            Name = "BeamNG.drive", Builtin = true, Processes = ["BeamNG.drive.x64", "BeamNG.x64", "BeamNG.drive"],
+            KeyLeft = FromVirtualKey(0xBC, ","),
+            KeyRight = FromVirtualKey(0xBE, "."),
+        };
+        yield return new GameProfile
+        {
+            Name = "Assetto Corsa", Builtin = true, Processes = ["acs", "acs_x86"],
+        };
+        yield return new GameProfile
+        {
+            Name = "Assetto Corsa Competizione", Builtin = true, Processes = ["AC2-Win64-Shipping"],
+            KeyLeft = new() { ScanCode = 0x4B, Extended = true, Alt = true, Name = "Left" },
+            KeyRight = new() { ScanCode = 0x4D, Extended = true, Alt = true, Name = "Right" },
+        };
+    }
+
+    private static KeyBinding FromVirtualKey(uint vk, string name) =>
+        new() { ScanCode = (ushort)Native.MapVirtualKey(vk, 0), Name = name };
 }

@@ -25,7 +25,12 @@ public sealed class MainForm : Form
     private readonly Pill _pill = new();
     private readonly Lamp _lampLeft, _lampRight;
     private readonly Label _lblState, _lblStalk, _lblAction, _lblWarning;
-    private readonly Label _lblStalkLeft, _lblStalkCenter, _lblStalkRight, _lblKeyLeft, _lblKeyRight;
+    private readonly Label _lblStalkLeft, _lblStalkCenter, _lblStalkRight, _lblKeyLeft, _lblKeyRight, _lblGameHint;
+    private readonly ComboBox _cmbGame;
+    private readonly Toggle _tglGameEnabled = new("Activé pour ce jeu");
+    private readonly Button _btnRemoveGame;
+    private readonly ContextMenuStrip _addMenu = new();
+    private GameProfile? _shownGame;
     private readonly Control[] _centerRow;
     private readonly ComboBox _cmbMode, _cmbBlinks, _cmbComfortMs;
     private readonly Toggle _tglComfort = new("Appui bref = clignotements confort");
@@ -58,11 +63,11 @@ public sealed class MainForm : Form
 
         // En-tête : nom et état du jeu.
         var header = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 0, 0, S(12)) };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width - S(220)));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(220)));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width - S(240)));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(240)));
         var titles = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         titles.Controls.Add(WithMargin(Theme.Label("StalkSync", Theme.Title), Padding.Empty));
-        titles.Controls.Add(WithMargin(Theme.Label("Clignotants réalistes pour ETS2 / ATS", Theme.Small, Theme.Muted), Padding.Empty));
+        titles.Controls.Add(WithMargin(Theme.Label("Clignotants réalistes pour ETS2, ATS, BeamNG, Assetto Corsa…", Theme.Small, Theme.Muted), Padding.Empty));
         header.Controls.Add(titles, 0, 0);
         header.Controls.Add(_pill, 1, 0);
         root.Controls.Add(header);
@@ -111,12 +116,36 @@ public sealed class MainForm : Form
         root.Controls.Add(stalk);
 
         // Touches du jeu.
-        var keys = new Card("Touches du jeu", width, labelCol, 0, buttonCol);
+        // Jeux : chacun a ses touches de clignotant.
+        var keys = new Card("Jeux", width, labelCol, 0, buttonCol);
+        _cmbGame = Theme.Combo(keys.InnerWidth - labelCol - buttonCol);
+        _cmbGame.Dock = DockStyle.Fill;
+        _cmbGame.Margin = new Padding(0, 3, S(8), 3);
+        _cmbGame.SelectedIndexChanged += (_, _) => ShowGame();
+        Button add = null!;
+        add = Theme.Button("Ajouter…", (_, _) =>
+        {
+            FillAddMenu();
+            _addMenu.Show(add, new Point(0, add.Height));
+        });
+        keys.Row(Theme.Label("Jeu"), _cmbGame, add);
+        _btnRemoveGame = Theme.Button("Retirer", (_, _) => RemoveGame());
+        keys.RowAt(0, _tglGameEnabled);
+        keys.Grid.SetColumnSpan(_tglGameEnabled, 2);
+        keys.Grid.Controls.Add(_btnRemoveGame, 2, keys.Grid.RowCount - 1);
         _lblKeyLeft = BindingLabel();
         _lblKeyRight = BindingLabel();
         keys.Row(Theme.Label("Clignotant gauche"), _lblKeyLeft, Theme.Button("Définir", (_, _) => CaptureKey(true)));
         keys.Row(Theme.Label("Clignotant droit"), _lblKeyRight, Theme.Button("Définir", (_, _) => CaptureKey(false)));
-        keys.Row(Hint(keys.InnerWidth, "Les mêmes que dans Options → Touches d'ETS2. Retire le commodo des clignotants dans le jeu."));
+        _lblGameHint = Hint(keys.InnerWidth, "");
+        keys.Row(_lblGameHint);
+        _tglGameEnabled.CheckedChanged += (_, _) =>
+        {
+            if (_loading || _shownGame == null) return;
+            _shownGame.Enabled = _tglGameEnabled.Checked;
+            _config.Save();
+            FillGames();
+        };
         root.Controls.Add(keys);
 
         // Options.
@@ -133,7 +162,7 @@ public sealed class MainForm : Form
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         root.Controls.Add(WithMargin(Theme.Label(
-            $"v{version?.ToString(3)} · les touches ne sont envoyées que quand ETS2 ou ATS est au premier plan",
+            $"v{version?.ToString(3)} · les touches ne sont envoyées qu'au jeu au premier plan",
             Theme.Small, Theme.Muted), new Padding(S(4), 0, 0, S(8))));
 
         LoadSettings();
@@ -223,29 +252,37 @@ public sealed class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        var key = keyData & Keys.KeyCode;
         if (_keyCapture is { } capture)
         {
-            e.Handled = e.SuppressKeyPress = true;
+            // On attend la touche principale : Ctrl, Alt et Maj seuls ne comptent pas.
+            if (key is Keys.ControlKey or Keys.ShiftKey or Keys.Menu or Keys.LControlKey or Keys.RControlKey
+                or Keys.LShiftKey or Keys.RShiftKey or Keys.LMenu or Keys.RMenu)
+                return true;
             _keyCapture = null;
-            if (e.KeyCode != Keys.Escape)
+            if (key != Keys.Escape)
                 capture(new KeyBinding
                 {
-                    ScanCode = (ushort)Native.MapVirtualKey((uint)e.KeyCode, 0),
-                    Extended = ExtendedKeys.Contains(e.KeyCode),
-                    Name = e.KeyCode.ToString(),
+                    ScanCode = (ushort)Native.MapVirtualKey((uint)key, 0),
+                    Extended = ExtendedKeys.Contains(key),
+                    Ctrl = keyData.HasFlag(Keys.Control),
+                    Alt = keyData.HasFlag(Keys.Alt),
+                    Shift = keyData.HasFlag(Keys.Shift),
+                    Name = key.ToString(),
                 });
             ShowBindings();
-            return;
+            return true;
         }
-        if (e.KeyCode == Keys.Escape && _detecting != null)
+        if (key == Keys.Escape && _detecting != null)
         {
             _engine?.CancelDetect();
             _detecting = null;
             ShowBindings();
+            return true;
         }
-        base.OnKeyDown(e);
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void ShowFromTray()
@@ -264,7 +301,7 @@ public sealed class MainForm : Form
         _cmbComfortMs.SelectedIndex = Array.IndexOf(ComfortDurations,
             ComfortDurations.MinBy(ms => Math.Abs(ms - b.ComfortMaxPressMs)));
         _tglMinimized.Checked = _config.StartMinimized;
-        ShowBindings();
+        FillGames();
     }
 
     private void SettingsChanged(object? sender, EventArgs e)
@@ -291,8 +328,8 @@ public sealed class MainForm : Form
         Show(_lblStalkLeft, _config.StalkLeft?.ToString());
         Show(_lblStalkCenter, _config.StalkCenter?.ToString());
         Show(_lblStalkRight, _config.StalkRight?.ToString());
-        Show(_lblKeyLeft, Native.KeyName(_config.KeyLeft));
-        Show(_lblKeyRight, Native.KeyName(_config.KeyRight));
+        Show(_lblKeyLeft, _shownGame?.KeyLeft is { } kl ? Native.KeyName(kl) : null);
+        Show(_lblKeyRight, _shownGame?.KeyRight is { } kr ? Native.KeyName(kr) : null);
         bool center = _config.Blinker.Mode == StalkMode.Positions;
         foreach (var c in _centerRow) c.Visible = center;
         _cmbBlinks.Enabled = _cmbComfortMs.Enabled = _config.Blinker.ComfortEnabled;
@@ -320,23 +357,94 @@ public sealed class MainForm : Form
         _engine?.CancelDetect();
         _detecting = null;
         ShowBindings();
+        if (_shownGame is not { } game) return;
         var label = left ? _lblKeyLeft : _lblKeyRight;
         label.Text = "Appuie sur la touche…";
         label.ForeColor = Theme.Accent;
         ActiveControl = null;
         _keyCapture = key =>
         {
-            if (left) _config.KeyLeft = key; else _config.KeyRight = key;
+            if (left) game.KeyLeft = key; else game.KeyRight = key;
             _config.Save();
+            FillGames();
         };
+    }
+
+    /// <summary>Remplit la liste des jeux en gardant la sélection.</summary>
+    private void FillGames()
+    {
+        var keep = _shownGame;
+        bool loading = _loading;
+        _loading = true;
+        _cmbGame.BeginUpdate();
+        _cmbGame.Items.Clear();
+        foreach (var g in _config.Games)
+            _cmbGame.Items.Add(g.Name + (!g.Enabled ? "  (désactivé)" : !g.Ready ? "  (touches à définir)" : ""));
+        _cmbGame.EndUpdate();
+        int index = keep == null ? 0 : Math.Max(0, _config.Games.IndexOf(keep));
+        _cmbGame.SelectedIndex = Math.Min(index, _cmbGame.Items.Count - 1);
+        _loading = loading;
+        ShowGame();
+    }
+
+    private void ShowGame()
+    {
+        int i = _cmbGame.SelectedIndex;
+        _shownGame = i >= 0 && i < _config.Games.Count ? _config.Games[i] : null;
+        if (_shownGame == null) return;
+        bool loading = _loading;
+        _loading = true;
+        _tglGameEnabled.Checked = _shownGame.Enabled;
+        _loading = loading;
+        _btnRemoveGame.Visible = !_shownGame.Builtin;
+        _lblGameHint.Text = Config.Hint(_shownGame);
+        _keyCapture = null;
+        ShowBindings();
+    }
+
+    private void FillAddMenu()
+    {
+        _addMenu.Items.Clear();
+        var known = _config.Games.SelectMany(g => g.Processes).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var windows = Native.WindowedProcesses().Where(w => !known.Contains(w.Process)).ToList();
+        if (windows.Count == 0)
+        {
+            _addMenu.Items.Add(new ToolStripMenuItem("Lance le jeu, puis reviens ici") { Enabled = false });
+            return;
+        }
+        _addMenu.Items.Add(new ToolStripMenuItem("Choisis la fenêtre du jeu :") { Enabled = false });
+        foreach (var (process, title) in windows)
+        {
+            string name = title.Length > 40 ? title[..40] + "…" : title;
+            _addMenu.Items.Add($"{name}   ({process}.exe)", null, (_, _) => AddGame(name, process));
+        }
+    }
+
+    private void AddGame(string name, string process)
+    {
+        var game = new GameProfile { Name = name, Processes = [process] };
+        // Nouvelle liste plutôt que modification : le moteur la parcourt sur un autre thread.
+        _config.Games = [.. _config.Games, game];
+        _config.Save();
+        _shownGame = game;
+        FillGames();
+    }
+
+    private void RemoveGame()
+    {
+        if (_shownGame is not { Builtin: false } game) return;
+        _config.Games = _config.Games.Where(g => g != game).ToList();
+        _config.Save();
+        _shownGame = null;
+        FillGames();
     }
 
     private void RefreshStatus()
     {
         if (!Visible || _engine?.Status is not { } s) return;
 
-        _pill.Set(s.GameFocused ? "Jeu au premier plan" : "Jeu en arrière-plan",
-            s.GameFocused ? Theme.Accent : Theme.Muted);
+        _pill.Set(s.Game is { } focused ? "▶  " + Config.ShortName(focused) : "Aucun jeu au premier plan",
+            s.Game != null ? Theme.Accent : Theme.Muted);
 
         bool phase = Environment.TickCount64 / 400 % 2 == 0;
         _lampLeft.Lit = s.Assumed == Side.Left && phase;
@@ -353,10 +461,11 @@ public sealed class MainForm : Form
             Side.Left => "à gauche",
             Side.Right => "à droite",
             _ => "au centre",
-        } + (s.Desired != s.Assumed && !s.GameFocused ? " · en attente du jeu" : "");
+        } + (s.Desired != s.Assumed && s.Game == null ? " · en attente du jeu" : "");
         _lblAction.Text = s.LastAction == "—" ? "Aucune touche envoyée" : "Dernière touche : " + s.LastAction;
 
         string? warning = s.Devices == 0 ? "Aucun périphérique de jeu détecté."
+            : s.Game is { Ready: false } g ? $"Touches de clignotant non définies pour {Config.ShortName(g)}."
             : _config.StalkLeft == null || _config.StalkRight == null ? "Commodo non configuré : clique sur Détecter ci-dessous."
             : _config.Blinker.Mode == StalkMode.Positions && _config.StalkCenter == null ? "Position centrale non configurée."
             : !s.LeftFound || !s.RightFound ? "Commodo introuvable : vérifie qu'il est branché."
