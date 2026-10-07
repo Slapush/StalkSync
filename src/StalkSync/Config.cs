@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using StalkSync.Core;
 
 namespace StalkSync;
@@ -8,7 +9,10 @@ public sealed class ButtonBinding
     public Guid Device { get; set; }
     public string DeviceName { get; set; } = "";
     public int Button { get; set; }
-    public override string ToString() => $"{DeviceName} — bouton {Button + 1}";
+    /// <summary>Autres boutons du même côté (ex. position à fond distincte de la mi-course).</summary>
+    public int[] Extra { get; set; } = [];
+    [JsonIgnore] public IEnumerable<int> All => Extra.Prepend(Button);
+    public override string ToString() => $"{DeviceName} — bouton {string.Join(" + ", All.Select(b => b + 1))}";
 }
 
 public sealed class KeyBinding

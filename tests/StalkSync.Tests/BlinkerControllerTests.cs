@@ -82,6 +82,26 @@ public class BlinkerControllerTests
     }
 
     [Fact]
+    public void Latching_full_press_through_half_position_stays_on()
+    {
+        // Mi-course puis à fond : le commodo change de bouton et retombe un instant au centre.
+        var c = Make(StalkMode.Latching);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, Game(), true));
+        c.Update(60, false, false, Game(Side.Left), true);
+        c.Update(90, true, false, Game(Side.Left), true);
+        long t = 300;
+        for (int i = 0; i < 10; i++)
+        {
+            Assert.Equal(BlinkerAction.None, c.Update(t, true, false, Game(Side.Left, lit: true), true));
+            t += 350;
+            Assert.Equal(BlinkerAction.None, c.Update(t, true, false, Game(Side.Left), true));
+            t += 350;
+        }
+        Assert.Equal(Side.Left, c.Desired);
+        Assert.False(c.ComfortActive);
+    }
+
+    [Fact]
     public void Momentary_long_press_latches_then_second_press_cancels()
     {
         var c = Make(StalkMode.Momentary);

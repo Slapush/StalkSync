@@ -186,7 +186,7 @@ public sealed class MainForm : Form
     private void DetectStalk(bool left)
     {
         var label = left ? _lblStalkLeft : _lblStalkRight;
-        label.Text = "actionne le commodo…";
+        label.Text = "pousse le commodo à fond et garde-le 2 s…";
         _engine?.BeginDetect(binding => BeginInvoke(() =>
         {
             if (left) _config.StalkLeft = binding; else _config.StalkRight = binding;

@@ -22,6 +22,9 @@ public sealed class Engine : IDisposable
 
     private Action<ButtonBinding>? _detect;
     private Dictionary<Guid, bool[]>? _detectBaseline;
+    private List<int>? _detectButtons;
+    private Guid _detectDevice;
+    private long _detectStart;
 
     public volatile EngineStatus? Status;
 
@@ -38,6 +41,7 @@ public sealed class Engine : IDisposable
     public void BeginDetect(Action<ButtonBinding> onFound)
     {
         _detectBaseline = null;
+        _detectButtons = null;
         _detect = onFound;
     }
 
@@ -65,18 +69,46 @@ public sealed class Engine : IDisposable
         {
             if (_detectBaseline == null)
                 _detectBaseline = devices.ToDictionary(d => d.Key, d => d.Value.Buttons);
-            else
-                foreach (var (id, (name, buttons)) in devices)
+            else if (_detectButtons == null)
+            {
+                foreach (var (id, (_, buttons)) in devices)
                 {
                     _detectBaseline.TryGetValue(id, out var before);
                     for (int i = 0; i < buttons.Length; i++)
                     {
                         if (!buttons[i] || (before != null && before[i])) continue;
-                        _detect = null;
-                        detect(new ButtonBinding { Device = id, DeviceName = name, Button = i });
+                        _detectDevice = id;
+                        _detectButtons = [i];
+                        _detectStart = now;
                         return;
                     }
                 }
+            }
+            else
+            {
+                // Un commodo peut changer de bouton entre la mi-course et la position à fond :
+                // on retient tous les boutons enfoncés jusqu'au relâchement ou pendant 1,5 s.
+                bool held = false;
+                if (devices.TryGetValue(_detectDevice, out var dev))
+                {
+                    _detectBaseline.TryGetValue(_detectDevice, out var before);
+                    for (int i = 0; i < dev.Buttons.Length; i++)
+                    {
+                        if (!dev.Buttons[i]) continue;
+                        if (_detectButtons.Contains(i)) held = true;
+                        else if (before == null || !before[i]) { _detectButtons.Add(i); held = true; }
+                    }
+                }
+                if (held && now - _detectStart < 1500) return;
+                _detect = null;
+                detect(new ButtonBinding
+                {
+                    Device = _detectDevice,
+                    DeviceName = dev.Name ?? "",
+                    Button = _detectButtons[0],
+                    Extra = _detectButtons.Skip(1).ToArray(),
+                });
+            }
             return;
         }
 
@@ -103,7 +135,7 @@ public sealed class Engine : IDisposable
         found = false;
         if (b == null || !devices.TryGetValue(b.Device, out var d)) return false;
         found = true;
-        return b.Button < d.Buttons.Length && d.Buttons[b.Button];
+        return b.All.Any(i => i < d.Buttons.Length && d.Buttons[i]);
     }
 
     public void Dispose()
