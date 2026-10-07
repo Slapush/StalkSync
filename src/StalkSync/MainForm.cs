@@ -19,7 +19,7 @@ public sealed class MainForm : Form
 
     private readonly Label _lblTelemetry = Value(), _lblGame = Value(), _lblBlinker = Value(),
         _lblStalk = Value(), _lblSteer = Value(), _lblAction = Value();
-    private readonly Label _lblStalkLeft = Value(), _lblStalkRight = Value(),
+    private readonly Label _lblStalkLeft = Value(), _lblStalkRight = Value(), _lblStalkCenter = Value(),
         _lblKeyLeft = Value(), _lblKeyRight = Value();
     private readonly ComboBox _cmbMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };
     private readonly CheckBox _chkComfort = new() { Text = "Appui bref = clignotements confort", AutoSize = true };
@@ -50,10 +50,15 @@ public sealed class MainForm : Form
         {
             "Maintenu — le commodo reste en position",
             "Impulsion — le commodo revient au centre",
+            "Un bouton par position (Moza) — impulsion à gauche, au centre, à droite",
         });
         root.Controls.Add(Group("Commodo",
-            Row("Gauche", _lblStalkLeft, Button("Détecter", (_, _) => DetectStalk(true))),
-            Row("Droite", _lblStalkRight, Button("Détecter", (_, _) => DetectStalk(false))),
+            Row("Gauche", _lblStalkLeft, Button("Détecter", (_, _) =>
+                DetectStalk(_lblStalkLeft, "pousse le commodo à fond à gauche…", b => _config.StalkLeft = b))),
+            Row("Droite", _lblStalkRight, Button("Détecter", (_, _) =>
+                DetectStalk(_lblStalkRight, "pousse le commodo à fond à droite…", b => _config.StalkRight = b))),
+            Row("Centre", _lblStalkCenter, Button("Détecter", (_, _) =>
+                DetectStalk(_lblStalkCenter, "ramène le commodo au centre…", b => _config.StalkCenter = b))),
             Row("Type", _cmbMode)));
 
         root.Controls.Add(Group("Touches du jeu (identiques à celles réglées dans les options d'ETS2)",
@@ -150,7 +155,7 @@ public sealed class MainForm : Form
     private void LoadSettings()
     {
         var b = _config.Blinker;
-        _cmbMode.SelectedIndex = b.Mode == StalkMode.Latching ? 0 : 1;
+        _cmbMode.SelectedIndex = (int)b.Mode;
         _chkComfort.Checked = b.ComfortEnabled;
         _numBlinks.Value = Math.Clamp(b.ComfortBlinks, 1, 9);
         _numComfortMs.Value = Math.Clamp(b.ComfortMaxPressMs, 100, 1500);
@@ -164,7 +169,7 @@ public sealed class MainForm : Form
     {
         if (_loading) return;
         var b = _config.Blinker;
-        b.Mode = _cmbMode.SelectedIndex == 0 ? StalkMode.Latching : StalkMode.Momentary;
+        b.Mode = (StalkMode)_cmbMode.SelectedIndex;
         b.ComfortEnabled = _chkComfort.Checked;
         b.ComfortBlinks = (int)_numBlinks.Value;
         b.ComfortMaxPressMs = (int)_numComfortMs.Value;
@@ -173,23 +178,25 @@ public sealed class MainForm : Form
         _config.StartMinimized = _chkMinimized.Checked;
         _config.Save();
         _engine?.ResetController();
+        ShowBindings();
     }
 
     private void ShowBindings()
     {
         _lblStalkLeft.Text = _config.StalkLeft?.ToString() ?? "non défini";
         _lblStalkRight.Text = _config.StalkRight?.ToString() ?? "non défini";
+        _lblStalkCenter.Text = _config.StalkCenter?.ToString()
+            ?? (_config.Blinker.Mode == StalkMode.Positions ? "non défini" : "non utilisé pour ce type");
         _lblKeyLeft.Text = _config.KeyLeft.Name;
         _lblKeyRight.Text = _config.KeyRight.Name;
     }
 
-    private void DetectStalk(bool left)
+    private void DetectStalk(Label label, string prompt, Action<ButtonBinding> assign)
     {
-        var label = left ? _lblStalkLeft : _lblStalkRight;
-        label.Text = "pousse le commodo à fond et garde-le 2 s…";
+        label.Text = prompt;
         _engine?.BeginDetect(binding => BeginInvoke(() =>
         {
-            if (left) _config.StalkLeft = binding; else _config.StalkRight = binding;
+            assign(binding);
             _config.Save();
             _engine?.ResetController();
             ShowBindings();

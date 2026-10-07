@@ -8,6 +8,11 @@ public enum StalkMode
     Latching,
     /// <summary>Le commodo revient au centre et n'envoie qu'une impulsion.</summary>
     Momentary,
+    /// <summary>
+    /// Un bouton par position (gauche, centre, droite), chacun n'envoyant qu'une impulsion à l'arrivée
+    /// sur sa position (ex. Moza). Se comporte comme <see cref="Latching"/> une fois traduit par <see cref="PulseStalk"/>.
+    /// </summary>
+    Positions,
 }
 
 public enum BlinkerAction { None, TapLeft, TapRight }
@@ -126,7 +131,7 @@ public sealed class BlinkerController
 
     private void OnStalkChange(long now, Side previous, Side current)
     {
-        if (_s.Mode == StalkMode.Latching)
+        if (_s.Mode != StalkMode.Momentary)
         {
             if (current != Side.Off)
             {

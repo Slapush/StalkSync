@@ -164,4 +164,48 @@ public class BlinkerControllerTests
         Assert.Equal(BlinkerAction.None, c.Update(20, true, false, Game(), false));
         Assert.Equal(BlinkerAction.TapLeft, c.Update(30, true, false, Game(), true));
     }
+
+    [Fact]
+    public void Pulse_stalk_remembers_last_position()
+    {
+        var p = new PulseStalk();
+        Assert.Equal(Side.Off, p.Update(false, false, false));
+        Assert.Equal(Side.Left, p.Update(true, false, false));
+        Assert.Equal(Side.Left, p.Update(false, false, false));
+        Assert.Equal(Side.Right, p.Update(false, true, false));
+        Assert.Equal(Side.Right, p.Update(false, false, false));
+        Assert.Equal(Side.Off, p.Update(false, false, true));
+        Assert.Equal(Side.Off, p.Update(false, false, false));
+    }
+
+    [Fact]
+    public void Positions_mode_full_press_stays_until_center_pulse()
+    {
+        var c = Make(StalkMode.Positions);
+        var p = new PulseStalk();
+        BlinkerAction Step(long t, bool l, bool center, GameState g)
+        {
+            var pos = p.Update(l, false, center);
+            return c.Update(t, pos == Side.Left, pos == Side.Right, g, true);
+        }
+        Assert.Equal(BlinkerAction.TapLeft, Step(0, true, false, Game()));
+        Step(150, false, false, Game(Side.Left));
+        Assert.Equal(BlinkerAction.None, Step(10_000, false, false, Game(Side.Left)));
+        Assert.Equal(Side.Left, c.Desired);
+        Assert.Equal(BlinkerAction.TapLeft, Step(10_100, false, true, Game(Side.Left)));
+        Assert.Equal(BlinkerAction.None, Step(10_250, false, false, Game()));
+        Assert.Equal(Side.Off, c.Desired);
+    }
+
+    [Fact]
+    public void Positions_mode_quick_return_to_center_gives_comfort()
+    {
+        var c = Make(StalkMode.Positions);
+        var p = new PulseStalk();
+        c.Update(0, p.Update(true, false, false) == Side.Left, false, Game(), true);
+        c.Update(150, p.Update(false, false, false) == Side.Left, false, Game(Side.Left), true);
+        c.Update(250, p.Update(false, false, true) == Side.Left, false, Game(Side.Left), true);
+        Assert.True(c.ComfortActive);
+        Assert.Equal(Side.Left, c.Desired);
+    }
 }

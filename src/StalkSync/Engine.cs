@@ -18,6 +18,7 @@ public sealed class Engine : IDisposable
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private volatile bool _running = true;
     private BlinkerController _controller;
+    private readonly PulseStalk _pulse = new();
     private string _lastAction = "—";
 
     private Action<ButtonBinding>? _detect;
@@ -114,6 +115,12 @@ public sealed class Engine : IDisposable
 
         bool left = IsPressed(devices, _config.StalkLeft, out bool leftFound);
         bool right = IsPressed(devices, _config.StalkRight, out bool rightFound);
+        if (_config.Blinker.Mode == StalkMode.Positions)
+        {
+            var position = _pulse.Update(left, right, IsPressed(devices, _config.StalkCenter, out _));
+            left = position == Side.Left;
+            right = position == Side.Right;
+        }
         var game = _telemetry.Read(now);
         bool focused = Native.GameHasFocus();
 

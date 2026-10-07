@@ -17,14 +17,16 @@ quand les deux diffèrent.
 - **Synchronisation** : commodo à gauche = clignotant gauche, au centre = éteint.
 - **Clignotements confort** : un appui bref donne 3 clignotements (nombre et durée réglables).
 - **Retour automatique** après le virage, basé sur l'angle du volant (commodo à impulsion).
-- **Deux types de commodo** : maintenu (reste en position) ou impulsion (revient au centre).
+- **Trois types de commodo** : maintenu (reste en position), impulsion (revient au centre), ou un bouton
+  par position (Moza : une impulsion en arrivant à gauche, au centre ou à droite).
 - **Aucune touche envoyée** si la fenêtre active n'est pas le jeu, si le jeu est en pause ou si les warnings sont allumés.
 
 ## Installation
 
 1. Télécharger `StalkSync.exe` depuis la page *Releases* et le lancer (aucune installation).
-2. Dans StalkSync, cliquer **Détecter** pour la gauche puis actionner le commodo à gauche ; idem à droite.
-3. Choisir le type de commodo.
+2. Dans StalkSync, cliquer **Détecter** pour la gauche puis pousser le commodo à fond à gauche ; idem à droite.
+3. Choisir le type de commodo. Pour le type **un bouton par position** (commodo Moza), mettre le commodo
+   à fond d'un côté, cliquer **Détecter** sur la ligne *Centre* puis le ramener au centre.
 4. Vérifier que les touches affichées sont celles des clignotants dans *Options → Touches* du jeu
    (par défaut `[` et `]`). Sinon, cliquer **Définir** et appuyer sur la bonne touche.
 5. Dans le jeu, **retirer le commodo des réglages de clignotants** (sinon le jeu reçoit la commande deux fois).
