@@ -1,4 +1,6 @@
-# StalkSync
+<p align="center"><img src="docs/logo.png" width="128" alt="StalkSync"></p>
+
+<h1 align="center">StalkSync</h1>
 
 Petit utilitaire Windows qui fait fonctionner le commodo de clignotants (ex. Moza Multi-function Stalks)
 comme sur un vrai véhicule dans Euro Truck Simulator 2, American Truck Simulator, BeamNG.drive,

@@ -7,9 +7,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
+    <ApplicationIcon>Assets\StalkSync.ico</ApplicationIcon>
+    <Product>StalkSync</Product>
+    <Description>Clignotants réalistes avec un commodo pour ETS2, ATS, BeamNG, Assetto Corsa…</Description>
+    <Copyright>Slapush</Copyright>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\StalkSync.ico" LogicalName="StalkSync.ico" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="SharpDX.DirectInput" Version="4.2.0" />
     <ProjectReference Include="..\StalkSync.Core\StalkSync.Core.csproj" />

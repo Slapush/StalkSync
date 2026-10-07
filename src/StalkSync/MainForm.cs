@@ -1,4 +1,3 @@
-using System.Drawing.Drawing2D;
 using System.Reflection;
 using StalkSync.Core;
 
@@ -41,7 +40,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "StalkSync";
-        Icon = MakeIcon();
+        Icon = LoadIcon(new Size(32, 32));
         BackColor = Theme.Background;
         ForeColor = Theme.Text;
         Font = Theme.Body;
@@ -170,7 +169,7 @@ public sealed class MainForm : Form
         foreach (var t in new[] { _tglComfort, _tglMinimized }) t.CheckedChanged += SettingsChanged;
         _loading = false;
 
-        _tray.Icon = Icon;
+        _tray.Icon = LoadIcon(SystemInformation.SmallIconSize);
         _tray.Text = "StalkSync";
         _tray.Visible = true;
         _tray.DoubleClick += (_, _) => ShowFromTray();
@@ -474,20 +473,10 @@ public sealed class MainForm : Form
         if (warning != null) _lblWarning.Text = "⚠  " + warning;
     }
 
-    /// <summary>Icône dessinée au lancement : deux flèches vertes sur fond sombre.</summary>
-    private static Icon MakeIcon()
+    /// <summary>Logo intégré à l'exe, à la taille demandée.</summary>
+    private static Icon LoadIcon(Size size)
     {
-        using var bmp = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var bg = Theme.Rounded(new RectangleF(0, 0, 31, 31), 7);
-            using var dark = new SolidBrush(Theme.Card);
-            g.FillPath(dark, bg);
-            using var green = new SolidBrush(Theme.Accent);
-            g.FillPolygon(green, new PointF[] { new(3, 16), new(13, 7), new(13, 25) });
-            g.FillPolygon(green, new PointF[] { new(29, 16), new(19, 7), new(19, 25) });
-        }
-        return Icon.FromHandle(bmp.GetHicon());
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("StalkSync.ico")!;
+        return new Icon(stream, size);
     }
 }
