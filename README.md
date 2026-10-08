@@ -2,6 +2,15 @@
 
 <h1 align="center">StalkSync</h1>
 
+<p align="center">
+  <a href="https://github.com/Slapush/StalkSync/releases"><img src="https://img.shields.io/github/v/release/Slapush/StalkSync?include_prereleases&label=version" alt="Version"></a>
+  <a href="https://github.com/Slapush/StalkSync/actions/workflows/build.yml"><img src="https://github.com/Slapush/StalkSync/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-green" alt="Licence MIT"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-blue" alt="Windows 10 / 11">
+</p>
+
+<p align="center"><b><a href="https://github.com/Slapush/StalkSync/releases/latest">⬇ Télécharger StalkSync.exe</a></b></p>
+
 Petit utilitaire Windows qui fait fonctionner le commodo de clignotants (ex. Moza Multi-function Stalks)
 comme sur un vrai véhicule dans Euro Truck Simulator 2, American Truck Simulator, BeamNG.drive,
 Assetto Corsa, Assetto Corsa Competizione… et n'importe quel jeu qui allume ses clignotants avec une touche.
@@ -36,7 +45,10 @@ définir les touches de clignotant réglées dans ce jeu.
 
 ## Installation
 
-1. Télécharger `StalkSync.exe` depuis la page *Releases* et le lancer (aucune installation).
+1. Télécharger `StalkSync.exe` depuis la page [Releases](https://github.com/Slapush/StalkSync/releases)
+   et le lancer : aucune installation, aucun .NET à installer (Windows 10 ou 11, 64 bits).
+   Windows SmartScreen peut avertir au premier lancement, l'exécutable n'étant pas signé :
+   *Informations complémentaires → Exécuter quand même*.
 2. Dans StalkSync, cliquer **Détecter** pour la gauche puis pousser le commodo à fond à gauche ; idem à droite.
 3. Choisir le type de commodo. Pour le type **un bouton par position** (commodo Moza), mettre le commodo
    à fond d'un côté, cliquer **Détecter** sur la ligne *Centre* puis le ramener au centre.
@@ -53,7 +65,21 @@ Désactiver l'extinction automatique des clignotants si le jeu en a une. StalkSy
 ce que fait le jeu : si le jeu coupe le clignotant tout seul, StalkSync le croit encore allumé et
 appuiera à contretemps au retour du commodo au centre.
 
+## Jeu en ligne
+
+StalkSync ne fait qu'envoyer des appuis de touches, comme un clavier : il ne lit ni ne modifie
+la mémoire du jeu et n'injecte rien. Vérifier tout de même les règles du serveur ou de la
+plateforme en ligne utilisée (TruckersMP, serveurs Assetto Corsa…).
+
+## Signaler un problème
+
+Ouvrir une [issue](https://github.com/Slapush/StalkSync/issues/new/choose) en précisant le jeu,
+le modèle de commodo, le type choisi dans StalkSync et, si possible, une capture de la fenêtre.
+
 ## Développement
+
+Prérequis : [SDK .NET 8](https://dotnet.microsoft.com/download/dotnet/8.0). La solution `StalkSync.sln`
+s'ouvre aussi dans Visual Studio ou Rider.
 
 ```
 dotnet test tests/StalkSync.Tests
@@ -63,3 +89,17 @@ dotnet publish src/StalkSync -c Release -r win-x64 --self-contained -p:PublishSi
 - `src/StalkSync.Core` : logique de décision, sans dépendance Windows, testée.
 - `src/StalkSync` : application WinForms (.NET 8) — DirectInput, `SendInput`.
 - Réglages enregistrés dans `%AppData%\StalkSync\config.json`.
+
+## Licence
+
+[MIT](LICENSE) © 2026 Slapush. Composants tiers : voir [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+StalkSync n'est affilié ni à SCS Software, BeamNG GmbH, Kunos Simulazioni ou MOZA Racing.
+Les noms de jeux et de matériel cités appartiennent à leurs propriétaires respectifs.
+
+---
+
+**English** — StalkSync makes a turn-signal stalk (e.g. Moza Multi-function Stalks) behave like a real
+car's in ETS2, ATS, BeamNG.drive, Assetto Corsa, ACC and any game that toggles its blinkers with a key:
+it tracks the stalk position and only presses the game's blinker key when the game is out of sync.
+Download the exe from [Releases](https://github.com/Slapush/StalkSync/releases); the interface is in French.

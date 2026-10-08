@@ -12,7 +12,9 @@
     <ApplicationIcon>Assets\StalkSync.ico</ApplicationIcon>
     <Product>StalkSync</Product>
     <Description>Clignotants réalistes avec un commodo pour ETS2, ATS, BeamNG, Assetto Corsa…</Description>
-    <Copyright>Slapush</Copyright>
+    <Authors>Slapush</Authors>
+    <Copyright>Copyright © 2026 Slapush</Copyright>
+    <RepositoryUrl>https://github.com/Slapush/StalkSync</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\StalkSync.ico" LogicalName="StalkSync.ico" />
