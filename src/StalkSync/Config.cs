@@ -73,6 +73,8 @@ public sealed class Config
     public List<GameProfile> Games { get; set; } = [];
     public BlinkerSettings Blinker { get; set; } = new();
     public bool StartMinimized { get; set; }
+    /// <summary>Télémétrie BeamNG (OutGauge) utilisée pour se recaler ; sinon StalkSync fonctionne à l'aveugle.</summary>
+    public bool BeamNgTelemetry { get; set; }
     /// <summary>Port UDP sur lequel BeamNG.drive envoie sa télémétrie OutGauge.</summary>
     public int OutGaugePort { get; set; } = 4444;
 

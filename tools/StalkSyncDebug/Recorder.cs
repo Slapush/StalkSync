@@ -119,7 +119,7 @@ sealed class Recorder : IDisposable
                     if ((int)t / 1000 != _lastCheck)
                     {
                         _lastCheck = (int)t / 1000;
-                        _stalkSyncRunning = Process.GetProcessesByName("StalkSync").Length > 0;
+                        _stalkSyncRunning = Process.GetProcessesByName("StalkSync").Length > 0 && StalkSyncUsesTelemetry();
                         if (_stalkSyncRunning) _direct?.Dispose();
                     }
                     var fg = Native.ForegroundProcess();
@@ -177,6 +177,20 @@ sealed class Recorder : IDisposable
                 Thread.Sleep(1000);
             }
             catch (Exception) when (!_running) { return; }
+        }
+    }
+
+    /// <summary>Vrai si StalkSync est réglé pour lire la télémétrie (il occupe alors le port 4444).</summary>
+    private static bool StalkSyncUsesTelemetry()
+    {
+        try
+        {
+            var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "StalkSync", "config.json");
+            return File.Exists(path) && JsonNode.Parse(File.ReadAllText(path))?["BeamNgTelemetry"]?.GetValue<bool>() == true;
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            return true;
         }
     }
 

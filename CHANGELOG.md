@@ -1,5 +1,10 @@
 # Changements
 
+## 0.4.0-beta.8 (pré-version de test)
+- Télémétrie BeamNG désactivable (carte *Jeux*, profil BeamNG), désactivée par défaut : StalkSync
+  fonctionne à l'aveugle et laisse le port 4444 libre.
+- Outil de debug : lit alors la télémétrie BeamNG directement, pour comparer sans qu'elle influence StalkSync.
+
 ## 0.4.0-beta.7 (pré-version de test)
 Corrections tirées du premier rapport de debug :
 - L'appel de phare suit le bouton du levier en direct (le Moza le maintient tant que le levier est tiré) :

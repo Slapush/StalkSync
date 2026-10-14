@@ -38,6 +38,7 @@ public sealed class MainForm : Form
     private readonly Toggle _tglLights = new("Gérer les phares avec le commodo (bêta)");
     private readonly Toggle _tglSkipParking = new("Sauter les veilleuses (veilleuses = éteint)");
     private readonly Label _lblLights, _lblTelemetry;
+    private readonly Toggle _tglTelemetry = new("Utiliser la télémétrie BeamNG (OutGauge)");
     private readonly LightLamp _lampParking, _lampLow, _lampHigh;
     private readonly FlowLayoutPanel _lightLamps;
     private readonly List<Control> _lightRows = [];
@@ -227,6 +228,13 @@ public sealed class MainForm : Form
             Theme.Button("Définir", (_, _) => CaptureGameKey(_lblKeyFlash, (g, k) => g.KeyFlash = k))));
         _lblGameHint = Hint(keys.InnerWidth, "");
         keys.Row(_lblGameHint);
+        keys.Row(_tglTelemetry);
+        _tglTelemetry.CheckedChanged += (_, _) =>
+        {
+            if (_loading) return;
+            _config.BeamNgTelemetry = _tglTelemetry.Checked;
+            _config.Save();
+        };
         _lblTelemetry = Hint(keys.InnerWidth, "");
         _lblTelemetry.Font = Theme.Body;
         keys.Row(_lblTelemetry);
@@ -390,6 +398,7 @@ public sealed class MainForm : Form
         _tglComfort.Checked = b.ComfortEnabled;
         _tglLights.Checked = _config.Lights.Enabled;
         _tglSkipParking.Checked = _config.Lights.SkipParking;
+        _tglTelemetry.Checked = _config.BeamNgTelemetry;
         _cmbBlinks.SelectedIndex = Math.Clamp(b.ComfortBlinks, 1, 9) - 1;
         _cmbComfortMs.SelectedIndex = Array.IndexOf(ComfortDurations,
             ComfortDurations.MinBy(ms => Math.Abs(ms - b.ComfortMaxPressMs)));
@@ -620,10 +629,12 @@ public sealed class MainForm : Form
                 _ => "",
             };
 
-        _lblTelemetry.Visible = _shownGame != null && Config.IsBeamNg(_shownGame);
+        _lblTelemetry.Visible = _tglTelemetry.Visible = _shownGame != null && Config.IsBeamNg(_shownGame);
         if (_lblTelemetry.Visible)
         {
-            (_lblTelemetry.Text, _lblTelemetry.ForeColor) = s.TelemetryError is { } err
+            (_lblTelemetry.Text, _lblTelemetry.ForeColor) = !s.TelemetryEnabled
+                ? ("Télémétrie désactivée : StalkSync fonctionne à l'aveugle, d'après les touches qu'il envoie.", Theme.Muted)
+                : s.TelemetryError is { } err
                 ? ($"Télémétrie OutGauge : {err}.", Theme.Warning)
                 : s.Telemetry is { Rate: < 10 } slow
                     ? ($"Télémétrie OutGauge : reçue mais lente ({slow.Rate} paquets/s, voyants 0x{slow.ShowLights:X4}). "

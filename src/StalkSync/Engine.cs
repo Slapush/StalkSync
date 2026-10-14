@@ -9,7 +9,7 @@ public sealed record EngineStatus(
     Side Desired, Side Assumed, bool Comfort, int Devices, string LastAction,
     bool LightsEnabled, LightState Ring, BeamPosition Beam,
     LightState ShownCycle, bool ShownHigh, bool ShownFlash, bool ShownHighInCycle,
-    BeamNgState? Telemetry, string? TelemetryError, int TelemetryPort);
+    bool TelemetryEnabled, BeamNgState? Telemetry, string? TelemetryError, int TelemetryPort);
 
 /// <summary>Boucle de fond : lit le commodo, puis envoie les touches nécessaires.</summary>
 public sealed class Engine : IDisposable
@@ -24,7 +24,8 @@ public sealed class Engine : IDisposable
     private volatile bool _reset;
     private GameProfile? _lastGame;
     private readonly PulseStalk _pulse = new();
-    private readonly OutGauge _outGauge;
+    // Créé seulement quand la télémétrie est activée : sinon le port 4444 reste libre.
+    private OutGauge? _outGauge;
     private readonly DebugMirror _debug = new();
     private Side _lastStalkSide;
     private LightState _lastRing;
@@ -48,7 +49,6 @@ public sealed class Engine : IDisposable
     {
         _config = config;
         _input = new StalkInput(hwnd);
-        _outGauge = new OutGauge(config.OutGaugePort, () => _clock.ElapsedMilliseconds, _debug.Packet);
         _thread = new Thread(Loop) { IsBackground = true, Name = "StalkSync" };
         _thread.Start();
     }
@@ -175,7 +175,14 @@ public sealed class Engine : IDisposable
             : games.FirstOrDefault(g => g.Enabled && g.Processes.Any(p => p.Equals(process, StringComparison.OrdinalIgnoreCase)));
         if (focused != null) _lastGame = focused;
 
-        var beamNg = _outGauge.Read(now);
+        if (_config.BeamNgTelemetry && _outGauge == null)
+            _outGauge = new OutGauge(_config.OutGaugePort, () => _clock.ElapsedMilliseconds, _debug.Packet);
+        else if (!_config.BeamNgTelemetry && _outGauge != null)
+        {
+            _outGauge?.Dispose();
+            _outGauge = null;
+        }
+        var beamNg = _outGauge?.Read(now);
 
         // Journal pour l'outil de debug : position du commodo et jeu au premier plan.
         var stalkSide = left == right ? Side.Off : left ? Side.Left : Side.Right;
@@ -220,7 +227,7 @@ public sealed class Engine : IDisposable
             shown.Desired, shown.Assumed, shown.ComfortActive, devices.Count, _lastAction,
             lights.Enabled, _lightStalk.Ring, _lightStalk.Beam,
             shownLights.AssumedCycle, shownLights.AssumedHigh, shownLights.FlashDown, shownGame.HighInCycle,
-            Config.IsBeamNg(shownGame) ? beamNg : null, _outGauge.Error, _outGauge.Port);
+            _config.BeamNgTelemetry, Config.IsBeamNg(shownGame) ? beamNg : null, _outGauge?.Error, _config.OutGaugePort);
     }
 
     private void UpdateLights(GameProfile game, long now, bool canSend, BeamNgState? telemetry)
@@ -289,7 +296,7 @@ public sealed class Engine : IDisposable
         _running = false;
         _thread.Join(500);
         _input.Dispose();
-        _outGauge.Dispose();
+        _outGauge?.Dispose();
         _debug.Dispose();
     }
 }

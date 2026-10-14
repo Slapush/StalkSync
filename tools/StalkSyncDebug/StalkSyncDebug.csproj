@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
-    <Version>0.4.0-beta.7</Version>
+    <Version>0.4.0-beta.8</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
     <ApplicationIcon>..\..\src\StalkSync\Assets\StalkSync.ico</ApplicationIcon>
