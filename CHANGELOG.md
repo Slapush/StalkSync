@@ -1,5 +1,14 @@
 # Changements
 
+## 0.4.0-beta.7 (pré-version de test)
+Corrections tirées du premier rapport de debug :
+- L'appel de phare suit le bouton du levier en direct (le Moza le maintient tant que le levier est tiré) :
+  il ne peut plus rester « coincé ». Avant, un retour manqué laissait la touche d'appel enfoncée, et
+  mettre les feux de croisement allumait les pleins phares.
+- Après la fin d'un appel de phare, StalkSync attend 300 ms avant une touche de feux : BeamNG remet
+  l'état d'avant l'appel et effaçait la touche appuyée juste après (pleins phares qui ne venaient pas).
+- Outil de debug : état des boutons au démarrage de l'enregistrement.
+
 ## 0.4.0-beta.6 (pré-version de test)
 - Télémétrie BeamNG lue sur un fil dédié, dès l'arrivée de chaque paquet : aucun paquet perdu,
   même à 400 paquets/s. Boucle principale plus réactive (5 ms).

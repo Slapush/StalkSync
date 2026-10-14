@@ -9,9 +9,9 @@ public enum BeamPosition { Neutral, High, Flash }
 public enum LightAction { None, Cycle, HighToggle, FlashPress, FlashRelease }
 
 /// <summary>
-/// Commodo de phares qui n'envoie qu'une impulsion en arrivant sur chaque position (ex. Moza) :
-/// bague éteint / veilleuses / croisement, et levier pleins phares / appel / retour au neutre.
-/// On retient la dernière impulsion de chaque groupe.
+/// Commodo de phares Moza : la bague et la position pleins phares n'envoient qu'une impulsion en arrivant
+/// sur leur position, on retient donc la dernière. L'appel de phare, lui, maintient son bouton tant que le
+/// levier est tiré : il suit le bouton en direct, ce qui empêche tout appel de phare « coincé ».
 /// </summary>
 public sealed class LightStalk
 {
@@ -33,9 +33,9 @@ public sealed class LightStalk
         if (Rising(0)) Ring = LightState.Off;
         else if (Rising(1)) Ring = LightState.Parking;
         else if (Rising(2)) Ring = LightState.Low;
-        if (Rising(3)) Beam = BeamPosition.High;
-        else if (Rising(4)) Beam = BeamPosition.Flash;
-        else if (Rising(5)) Beam = BeamPosition.Neutral;
+        if (flash) Beam = BeamPosition.Flash;
+        else if (Rising(3)) Beam = BeamPosition.High;
+        else if (Rising(5) || Beam == BeamPosition.Flash) Beam = BeamPosition.Neutral;
         Array.Copy(now, _last, now.Length);
     }
 }
@@ -54,6 +54,11 @@ public sealed class LightController
 
     /// <summary>Durée pendant laquelle l'état lu en télémétrie doit rester stable avant d'être retenu.</summary>
     public const int SyncStableMs = 400;
+    /// <summary>
+    /// Après la fin d'un appel de phare, BeamNG remet l'état d'avant : une touche de feux appuyée juste après
+    /// serait effacée. On attend donc un peu.
+    /// </summary>
+    public const int FlashSettleMs = 300;
     /// <summary>Au-delà, un état contraire à notre dernier appui veut dire que le jeu ne l'a pas pris en compte.</summary>
     public const int SyncGiveUpMs = 2500;
 
@@ -84,7 +89,7 @@ public sealed class LightController
             _lastFlash = nowMs;
             return flash ? LightAction.FlashPress : LightAction.FlashRelease;
         }
-        if (!canSend || nowMs - _lastTap < _cooldownMs) return LightAction.None;
+        if (!canSend || nowMs - _lastTap < _cooldownMs || nowMs - _lastFlash < FlashSettleMs) return LightAction.None;
 
         var cycle = keys.Cycle;
         bool highInCycle = cycle.Contains(LightState.High);

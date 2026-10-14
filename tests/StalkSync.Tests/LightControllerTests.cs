@@ -22,6 +22,54 @@ public class LightControllerTests
     }
 
     [Fact]
+    public void Flash_follows_the_held_button_and_never_sticks()
+    {
+        var s = new LightStalk();
+        s.Update(false, false, false, false, true, false);
+        Assert.Equal(BeamPosition.Flash, s.Beam);
+        s.Update(false, false, false, false, true, false);
+        Assert.Equal(BeamPosition.Flash, s.Beam);
+        // Bouton d'appel relâché sans impulsion de retour (manquée) : on revient quand même au neutre.
+        s.Update(false, false, false, false, false, false);
+        Assert.Equal(BeamPosition.Neutral, s.Beam);
+    }
+
+    [Fact]
+    public void Moza_flash_then_return_pulse_in_same_poll()
+    {
+        // Rapport du 14/10 : bouton 6 relâché et bouton 5 appuyé au même instant.
+        var s = new LightStalk();
+        s.Update(false, false, false, false, true, false);
+        s.Update(false, false, false, false, false, true);
+        Assert.Equal(BeamPosition.Neutral, s.Beam);
+    }
+
+    [Fact]
+    public void Flash_from_high_beam_returns_to_neutral()
+    {
+        var s = new LightStalk();
+        s.Update(false, false, false, true, false, false);
+        s.Update(false, false, false, false, false, false);
+        Assert.Equal(BeamPosition.High, s.Beam);
+        s.Update(false, false, false, false, true, false);
+        Assert.Equal(BeamPosition.Flash, s.Beam);
+        s.Update(false, false, false, false, false, true);
+        Assert.Equal(BeamPosition.Neutral, s.Beam);
+    }
+
+    [Fact]
+    public void Light_key_waits_after_flash_release()
+    {
+        // Rapport du 14/10 : N appuyé 15 ms après la fin de l'appel, BeamNG l'avait perdu.
+        var c = new LightController(assumedCycle: LightState.Low);
+        Assert.Equal(LightAction.FlashPress, c.Update(0, LightState.Low, BeamPosition.Flash, BeamNg, true));
+        Assert.Equal(LightAction.FlashRelease, c.Update(5000, LightState.Low, BeamPosition.High, BeamNg, true));
+        Assert.Equal(LightAction.None, c.Update(5015, LightState.Low, BeamPosition.High, BeamNg, true));
+        Assert.Equal(LightAction.None, c.Update(5200, LightState.Low, BeamPosition.High, BeamNg, true));
+        Assert.Equal(LightAction.Cycle, c.Update(5300, LightState.Low, BeamPosition.High, BeamNg, true));
+    }
+
+    [Fact]
     public void Trucks_cycle_key_reaches_low_beam_in_two_presses()
     {
         var c = new LightController();

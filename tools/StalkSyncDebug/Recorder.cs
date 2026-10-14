@@ -44,7 +44,7 @@ sealed class Recorder : IDisposable
     // Données enregistrées.
     private readonly List<ButtonEvent> _buttons = [];
     private readonly List<KeyEvent> _keys = [];
-    private readonly List<object> _foreground = [], _markers = [], _ogChanges = [];
+    private readonly List<object> _foreground = [], _markers = [], _ogChanges = [], _initial = [];
     private readonly List<JsonNode?> _stalkSyncEvents = [];
     private readonly Dictionary<Guid, (string Name, bool[] Buttons)> _devices = [];
     private readonly List<int> _ogPerSecond = [];
@@ -103,6 +103,12 @@ sealed class Recorder : IDisposable
                 {
                     foreach (var (id, (name, buttons)) in devices)
                     {
+                        if (!_devices.ContainsKey(id))
+                            _initial.Add(new
+                            {
+                                t, peripherique = name,
+                                boutonsAppuyes = Enumerable.Range(0, buttons.Length).Where(i => buttons[i]).Select(i => i + 1).ToArray(),
+                            });
                         if (_devices.TryGetValue(id, out var before))
                             for (int i = 0; i < buttons.Length && i < before.Buttons.Length; i++)
                                 if (buttons[i] != before.Buttons[i] && _buttons.Count < MaxItems)
@@ -298,6 +304,7 @@ sealed class Recorder : IDisposable
                 peripheriques = _devices.Select(d => new { nom = d.Value.Name, id = d.Key, boutons = d.Value.Buttons.Length }),
                 configStalkSync = config,
                 reperes = _markers,
+                etatInitialBoutons = _initial,
                 evenementsStalkSync = _stalkSyncEvents,
                 boutons = _buttons,
                 touches = _keys,
