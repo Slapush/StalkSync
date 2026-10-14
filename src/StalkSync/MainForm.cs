@@ -625,8 +625,11 @@ public sealed class MainForm : Form
         {
             (_lblTelemetry.Text, _lblTelemetry.ForeColor) = s.TelemetryError is { } err
                 ? ($"Télémétrie OutGauge : {err}.", Theme.Warning)
+                : s.Telemetry is { Rate: < 10 } slow
+                    ? ($"Télémétrie OutGauge : reçue mais lente ({slow.Rate} paquets/s, voyants 0x{slow.ShowLights:X4}). "
+                       + "StalkSync s'en accommode, mais les voyants réagiront avec du retard.", Theme.Warning)
                 : s.Telemetry is { } tm
-                    ? ($"Télémétrie OutGauge : reçue (voyants 0x{tm.ShowLights:X4}).", Theme.Accent)
+                    ? ($"Télémétrie OutGauge : reçue ({tm.Rate} paquets/s, voyants 0x{tm.ShowLights:X4}).", Theme.Accent)
                     : ($"Télémétrie OutGauge : en attente. Dans BeamNG : Options → Autres → Protocoles → OutGauge, "
                        + $"adresse 127.0.0.1, port {s.TelemetryPort}.", Theme.Muted);
         }

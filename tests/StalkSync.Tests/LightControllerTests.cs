@@ -99,27 +99,61 @@ public class LightControllerTests
         Assert.Equal(LightState.Off, c.AssumedCycle);
     }
 
+    /// <summary>Envoie la même valeur de télémétrie toutes les 50 ms, de <paramref name="from"/> à <paramref name="to"/>.</summary>
+    private static void Feed(LightController c, LightKeys keys, long from, long to, bool high, bool? low = null)
+    {
+        for (long t = from; t <= to; t += 50) c.Observe(t, keys.Cycle, high, low);
+    }
+
     [Fact]
     public void Telemetry_high_beam_corrects_beamng_cycle()
     {
         var c = new LightController();
-        c.Observe(5000, BeamNg.Cycle, high: true, low: null);
+        Feed(c, BeamNg, 0, 1000, high: true);
         Assert.Equal(LightState.High, c.AssumedCycle);
-        c.Observe(6000, BeamNg.Cycle, high: false, low: null);
+        Feed(c, BeamNg, 1050, 2000, high: false);
         Assert.Equal(LightState.Low, c.AssumedCycle);
-        c.Observe(7000, BeamNg.Cycle, high: false, low: false);
+        Feed(c, BeamNg, 2050, 3000, high: false, low: false);
         Assert.Equal(LightState.Off, c.AssumedCycle);
     }
 
     [Fact]
-    public void Telemetry_ignored_right_after_a_press_and_during_flash()
+    public void BeamNg_high_to_low_is_not_undone_by_slow_telemetry()
     {
-        var c = new LightController();
-        Assert.Equal(LightAction.Cycle, c.Update(0, LightState.Low, BeamPosition.Neutral, BeamNg, true));
-        c.Observe(200, BeamNg.Cycle, high: false, low: false);
+        // Pleins phares, levier ramené au neutre : deux appuis (pleins phares → éteint → croisement).
+        var c = new LightController(assumedCycle: LightState.High);
+        Feed(c, BeamNg, 0, 1000, high: true);
+        long t = 1000;
+        Assert.Equal(LightAction.Cycle, c.Update(t, LightState.Low, BeamPosition.Neutral, BeamNg, true));
+        Assert.Equal(LightAction.Cycle, c.Update(t + 150, LightState.Low, BeamPosition.Neutral, BeamNg, true));
+        // Télémétrie lente : elle annonce encore les pleins phares pendant 1,2 s après les appuis.
+        for (long u = t + 150; u <= t + 1350; u += 50)
+        {
+            c.Observe(u, BeamNg.Cycle, true, null);
+            Assert.Equal(LightAction.None, c.Update(u, LightState.Low, BeamPosition.Neutral, BeamNg, true));
+        }
+        Feed(c, BeamNg, t + 1400, t + 3000, high: false);
+        Assert.Equal(LightAction.None, c.Update(t + 3000, LightState.Low, BeamPosition.Neutral, BeamNg, true));
         Assert.Equal(LightState.Low, c.AssumedCycle);
-        Assert.Equal(LightAction.FlashPress, c.Update(1000, LightState.Low, BeamPosition.Flash, BeamNg, true));
-        c.Observe(3000, BeamNg.Cycle, high: true, low: true);
+    }
+
+    [Fact]
+    public void Telemetry_contradiction_wins_when_a_press_was_lost()
+    {
+        var c = new LightController(assumedCycle: LightState.Low);
+        Assert.Equal(LightAction.Cycle, c.Update(0, LightState.Low, BeamPosition.High, BeamNg, true));
+        // Le jeu n'a pas vu l'appui : les pleins phares restent éteints bien au-delà du délai.
+        Feed(c, BeamNg, 0, 3000, high: false);
+        Assert.Equal(LightState.Low, c.AssumedCycle);
+        Assert.Equal(LightAction.Cycle, c.Update(3000, LightState.Low, BeamPosition.High, BeamNg, true));
+    }
+
+    [Fact]
+    public void Telemetry_ignored_during_flash()
+    {
+        var c = new LightController(assumedCycle: LightState.Low);
+        Assert.Equal(LightAction.FlashPress, c.Update(0, LightState.Low, BeamPosition.Flash, BeamNg, true));
+        Feed(c, BeamNg, 0, 3000, high: true);
         Assert.Equal(LightState.Low, c.AssumedCycle);
     }
 
@@ -127,7 +161,7 @@ public class LightControllerTests
     public void Telemetry_sets_separate_high_beam_state()
     {
         var c = new LightController();
-        c.Observe(5000, Trucks.Cycle, high: true, low: null);
+        Feed(c, Trucks, 0, 1000, high: true);
         Assert.True(c.AssumedHigh);
     }
 }

@@ -52,10 +52,15 @@ public sealed class LightController
     private readonly int _cooldownMs;
     private long _lastTap = -1_000_000, _lastFlash = -1_000_000;
 
-    /// <summary>Délai pendant lequel la télémétrie est ignorée après un appui (le jeu met un moment à suivre).</summary>
-    public const int SyncGraceMs = 800;
+    /// <summary>Durée pendant laquelle l'état lu en télémétrie doit rester stable avant d'être retenu.</summary>
+    public const int SyncStableMs = 400;
+    /// <summary>Au-delà, un état contraire à notre dernier appui veut dire que le jeu ne l'a pas pris en compte.</summary>
+    public const int SyncGiveUpMs = 2500;
 
-    public LightController(int cooldownMs = 250, LightState assumedCycle = LightState.Off, bool assumedHigh = false)
+    private readonly Observation<bool> _observedHigh = new();
+    private readonly Observation<int> _observedLow = new();
+
+    public LightController(int cooldownMs = 150, LightState assumedCycle = LightState.Off, bool assumedHigh = false)
     {
         _cooldownMs = cooldownMs;
         AssumedCycle = assumedCycle;
@@ -118,7 +123,13 @@ public sealed class LightController
     /// </summary>
     public void Observe(long nowMs, IReadOnlyList<LightState> cycle, bool high, bool? low)
     {
-        if (FlashDown || nowMs - _lastTap < SyncGraceMs || nowMs - _lastFlash < SyncGraceMs) return;
+        _observedHigh.Feed(nowMs, high);
+        _observedLow.Feed(nowMs, low == null ? -1 : low.Value ? 1 : 0);
+        long lastAction = Math.Max(_lastTap, _lastFlash);
+        if (FlashDown || !_observedHigh.TryGet(nowMs, lastAction, SyncStableMs, SyncGiveUpMs, out high)) return;
+        // Croisement : retenu seulement s'il est fourni et fiable, sinon considéré comme inconnu.
+        low = _observedLow.TryGet(nowMs, lastAction, SyncStableMs, SyncGiveUpMs, out int lowCode) && lowCode >= 0
+            ? lowCode == 1 : null;
         if (cycle.Contains(LightState.High))
         {
             if (high) AssumedCycle = LightState.High;

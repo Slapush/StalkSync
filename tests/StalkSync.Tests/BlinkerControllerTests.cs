@@ -149,16 +149,39 @@ public class BlinkerControllerTests
         Assert.Equal(Side.Left, c.Desired);
     }
 
+    private static void Feed(BlinkerController c, long from, long to, Side side)
+    {
+        for (long t = from; t <= to; t += 50) c.Observe(t, side);
+    }
+
     [Fact]
-    public void Telemetry_corrects_assumed_state_after_grace_delay()
+    public void Telemetry_follows_game_cancel_and_retaps_while_stalk_is_held()
+    {
+        var c = Make(StalkMode.Latching);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(0, true, false, true));
+        Feed(c, 100, 4000, Side.Left);
+        Assert.Equal(Side.Left, c.Assumed);
+        // Le jeu coupe le clignotant tout seul : StalkSync le voit et le rallume, le commodo étant toujours à gauche.
+        Feed(c, 4050, 4700, Side.Off);
+        Assert.Equal(Side.Off, c.Assumed);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(4700, true, false, true));
+    }
+
+    [Fact]
+    public void Lingering_blink_after_cancel_does_not_turn_blinker_back_on()
     {
         var c = Make(StalkMode.Latching);
         c.Update(0, true, false, true);
-        c.Observe(500, Side.Off);
-        Assert.Equal(Side.Left, c.Assumed);
-        // Le jeu a coupé le clignotant : on le sait, et on le rallume puisque le commodo est toujours à gauche.
-        c.Observe(5000, Side.Off);
+        Feed(c, 100, 2000, Side.Left);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(2000, false, false, true));
+        // La télémétrie annonce encore le clignotant pendant la fin du dernier clignotement.
+        for (long t = 2050; t <= 3200; t += 50)
+        {
+            c.Observe(t, Side.Left);
+            Assert.Equal(BlinkerAction.None, c.Update(t, false, false, true));
+        }
+        Feed(c, 3250, 5000, Side.Off);
+        Assert.Equal(BlinkerAction.None, c.Update(5000, false, false, true));
         Assert.Equal(Side.Off, c.Assumed);
-        Assert.Equal(BlinkerAction.TapLeft, c.Update(5010, true, false, true));
     }
 }

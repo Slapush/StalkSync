@@ -1,5 +1,12 @@
 # Changements
 
+## 0.4.0-beta.5 (pré-version de test)
+- BeamNG : le retour pleins phares → croisement ne saccade plus. Une télémétrie lente renvoyait encore
+  « pleins phares » juste après les appuis, et StalkSync rappuyait à tort. L'état lu n'est maintenant
+  retenu que s'il est stable et apparu après le dernier appui.
+- Appuis enchaînés sur la touche de mode des feux plus rapprochés (150 ms).
+- Fréquence de réception de la télémétrie affichée dans la carte *Jeux*.
+
 ## 0.4.0-beta.4 (pré-version de test)
 - Option « Sauter les veilleuses » : la position veilleuses du commodo laisse les phares éteints,
   on passe directement d'éteint au croisement.
