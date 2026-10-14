@@ -213,7 +213,8 @@ public sealed class Engine : IDisposable
             c.FlashWasReleased();
         }
 
-        var action = c.Update(now, _lightStalk.Ring, _lightStalk.Beam, game.LightKeys, canSend);
+        var ring = _config.Lights.SkipParking && _lightStalk.Ring == LightState.Parking ? LightState.Off : _lightStalk.Ring;
+        var action = c.Update(now, ring, _lightStalk.Beam, game.LightKeys, canSend);
         switch (action)
         {
             case LightAction.Cycle:

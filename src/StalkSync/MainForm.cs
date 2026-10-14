@@ -36,6 +36,7 @@ public sealed class MainForm : Form
     private readonly ComboBox _cmbMode, _cmbBlinks, _cmbComfortMs;
     private readonly Toggle _tglComfort = new("Appui bref = clignotements confort");
     private readonly Toggle _tglLights = new("Gérer les phares avec le commodo (bêta)");
+    private readonly Toggle _tglSkipParking = new("Sauter les veilleuses (veilleuses = éteint)");
     private readonly Label _lblLights, _lblTelemetry;
     private readonly LightLamp _lampParking, _lampLow, _lampHigh;
     private readonly FlowLayoutPanel _lightLamps;
@@ -157,6 +158,13 @@ public sealed class MainForm : Form
         // Phares : un bouton par position du commodo (Moza : 1 à 6).
         var lightCard = new Card("Phares", col, labelCol, 0, buttonCol);
         lightCard.Row(_tglLights);
+        _lightRows.AddRange(lightCard.Row(_tglSkipParking));
+        _tglSkipParking.CheckedChanged += (_, _) =>
+        {
+            if (_loading) return;
+            _config.Lights.SkipParking = _tglSkipParking.Checked;
+            _config.Save();
+        };
         _lightRows.AddRange(lightCard.Row(Theme.Label("Préréglage"),
             Theme.Label("Moza : boutons 1 à 6", Theme.Body, Theme.Muted), Theme.Button("Appliquer", (_, _) => MozaLights())));
         foreach (var (caption, prompt, get, set) in new (string, string, Func<ButtonBinding?>, Action<ButtonBinding>)[]
@@ -381,6 +389,7 @@ public sealed class MainForm : Form
         _cmbMode.SelectedIndex = Math.Clamp((int)b.Mode, 0, _cmbMode.Items.Count - 1);
         _tglComfort.Checked = b.ComfortEnabled;
         _tglLights.Checked = _config.Lights.Enabled;
+        _tglSkipParking.Checked = _config.Lights.SkipParking;
         _cmbBlinks.SelectedIndex = Math.Clamp(b.ComfortBlinks, 1, 9) - 1;
         _cmbComfortMs.SelectedIndex = Array.IndexOf(ComfortDurations,
             ComfortDurations.MinBy(ms => Math.Abs(ms - b.ComfortMaxPressMs)));

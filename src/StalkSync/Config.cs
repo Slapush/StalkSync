@@ -29,6 +29,8 @@ public sealed class KeyBinding
 public sealed class LightBindings
 {
     public bool Enabled { get; set; }
+    /// <summary>Position veilleuses traitée comme « éteint » : on passe directement d'éteint au croisement.</summary>
+    public bool SkipParking { get; set; }
     public ButtonBinding? Off { get; set; }
     public ButtonBinding? Parking { get; set; }
     public ButtonBinding? Low { get; set; }

@@ -1,5 +1,9 @@
 # Changements
 
+## 0.4.0-beta.4 (pré-version de test)
+- Option « Sauter les veilleuses » : la position veilleuses du commodo laisse les phares éteints,
+  on passe directement d'éteint au croisement.
+
 ## 0.4.0-beta.3 (pré-version de test)
 - Télémétrie BeamNG.drive (OutGauge) : l'état réel des clignotants et des pleins phares recale StalkSync,
   les voyants clignotent au rythme du jeu, et rien n'est envoyé quand les warnings sont allumés.
