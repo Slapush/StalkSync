@@ -33,6 +33,13 @@ public sealed class MainForm : Form
     private readonly Control[] _centerRow;
     private readonly ComboBox _cmbMode, _cmbBlinks, _cmbComfortMs;
     private readonly Toggle _tglComfort = new("Appui bref = clignotements confort");
+    private readonly Toggle _tglLights = new("Gérer les phares avec le commodo (bêta)");
+    private readonly Label _lblLights;
+    private readonly List<Control> _lightRows = [];
+    private readonly Dictionary<Label, Func<ButtonBinding?>> _lightLabels = [];
+    private readonly Label _lblKeyCycle, _lblKeyHigh, _lblKeyFlash;
+    private readonly List<Control> _gameLightRows = [];
+    private Control[] _highRow = [];
     private readonly Toggle _tglMinimized = new("Démarrer réduit dans la zone de notification");
 
     private int S(int px) => px * DeviceDpi / 96;
@@ -82,8 +89,10 @@ public sealed class MainForm : Form
         dash.Row(_lampLeft, _lblState, _lampRight);
         dash.RowAt(1, _lblStalk);
         dash.RowAt(1, _lblAction);
+        _lblLights = Centered(Theme.Body, Theme.Accent);
+        dash.RowAt(1, _lblLights);
         foreach (var lamp in new[] { _lampLeft, _lampRight })
-            dash.Grid.SetRowSpan(lamp, 3);
+            dash.Grid.SetRowSpan(lamp, 4);
         _lblWarning = Theme.Label("", Theme.Body, Theme.Warning);
         _lblWarning.Margin = new Padding(0, S(8), 0, 0);
         _lblWarning.Visible = false;
@@ -114,6 +123,35 @@ public sealed class MainForm : Form
             DetectStalk(_lblStalkRight, "Pousse à fond à droite…", b => _config.StalkRight = b)));
         root.Controls.Add(stalk);
 
+        // Phares : un bouton par position du commodo (Moza : 1 à 6).
+        var lightCard = new Card("Phares", width, labelCol, 0, buttonCol);
+        lightCard.Row(_tglLights);
+        _lightRows.AddRange(lightCard.Row(Theme.Label("Préréglage"),
+            Theme.Label("Moza : boutons 1 à 6", Theme.Body, Theme.Muted), Theme.Button("Appliquer", (_, _) => MozaLights())));
+        foreach (var (caption, prompt, get, set) in new (string, string, Func<ButtonBinding?>, Action<ButtonBinding>)[]
+        {
+            ("Phares éteints", "Tourne sur éteint…", () => _config.Lights.Off, b => _config.Lights.Off = b),
+            ("Veilleuses", "Tourne sur veilleuses…", () => _config.Lights.Parking, b => _config.Lights.Parking = b),
+            ("Croisement", "Tourne sur croisement…", () => _config.Lights.Low, b => _config.Lights.Low = b),
+            ("Pleins phares", "Pousse le levier…", () => _config.Lights.High, b => _config.Lights.High = b),
+            ("Appel de phare", "Tire le levier…", () => _config.Lights.Flash, b => _config.Lights.Flash = b),
+            ("Retour au neutre", "Ramène le levier…", () => _config.Lights.Neutral, b => _config.Lights.Neutral = b),
+        })
+        {
+            var label = BindingLabel();
+            _lightLabels[label] = get;
+            _lightRows.AddRange(lightCard.Row(Theme.Label(caption), label,
+                Theme.Button("Détecter", (_, _) => DetectStalk(label, prompt, set))));
+        }
+        _tglLights.CheckedChanged += (_, _) =>
+        {
+            if (_loading) return;
+            _config.Lights.Enabled = _tglLights.Checked;
+            _config.Save();
+            ShowBindings();
+        };
+        root.Controls.Add(lightCard);
+
         // Touches du jeu.
         // Jeux : chacun a ses touches de clignotant.
         var keys = new Card("Jeux", width, labelCol, 0, buttonCol);
@@ -136,6 +174,16 @@ public sealed class MainForm : Form
         _lblKeyRight = BindingLabel();
         keys.Row(Theme.Label("Clignotant gauche"), _lblKeyLeft, Theme.Button("Définir", (_, _) => CaptureKey(true)));
         keys.Row(Theme.Label("Clignotant droit"), _lblKeyRight, Theme.Button("Définir", (_, _) => CaptureKey(false)));
+        _lblKeyCycle = BindingLabel();
+        _lblKeyHigh = BindingLabel();
+        _lblKeyFlash = BindingLabel();
+        _gameLightRows.AddRange(keys.Row(Theme.Label("Mode des feux"), _lblKeyCycle,
+            Theme.Button("Définir", (_, _) => CaptureGameKey(_lblKeyCycle, (g, k) => g.KeyLightCycle = k))));
+        _highRow = keys.Row(Theme.Label("Pleins phares"), _lblKeyHigh,
+            Theme.Button("Définir", (_, _) => CaptureGameKey(_lblKeyHigh, (g, k) => g.KeyHighBeam = k)));
+        _gameLightRows.AddRange(_highRow);
+        _gameLightRows.AddRange(keys.Row(Theme.Label("Appel de phare"), _lblKeyFlash,
+            Theme.Button("Définir", (_, _) => CaptureGameKey(_lblKeyFlash, (g, k) => g.KeyFlash = k))));
         _lblGameHint = Hint(keys.InnerWidth, "");
         keys.Row(_lblGameHint);
         _tglGameEnabled.CheckedChanged += (_, _) =>
@@ -159,9 +207,9 @@ public sealed class MainForm : Form
         options.Row(_tglMinimized);
         root.Controls.Add(options);
 
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         root.Controls.Add(WithMargin(Theme.Label(
-            $"v{version?.ToString(3)} · les touches ne sont envoyées qu'au jeu au premier plan",
+            $"v{version} · les touches ne sont envoyées qu'au jeu au premier plan",
             Theme.Small, Theme.Muted), new Padding(S(4), 0, 0, S(8))));
 
         LoadSettings();
@@ -296,6 +344,7 @@ public sealed class MainForm : Form
         var b = _config.Blinker;
         _cmbMode.SelectedIndex = Math.Clamp((int)b.Mode, 0, _cmbMode.Items.Count - 1);
         _tglComfort.Checked = b.ComfortEnabled;
+        _tglLights.Checked = _config.Lights.Enabled;
         _cmbBlinks.SelectedIndex = Math.Clamp(b.ComfortBlinks, 1, 9) - 1;
         _cmbComfortMs.SelectedIndex = Array.IndexOf(ComfortDurations,
             ComfortDurations.MinBy(ms => Math.Abs(ms - b.ComfortMaxPressMs)));
@@ -331,6 +380,18 @@ public sealed class MainForm : Form
         Show(_lblKeyRight, _shownGame?.KeyRight is { } kr ? Native.KeyName(kr) : null);
         bool center = _config.Blinker.Mode == StalkMode.Positions;
         foreach (var c in _centerRow) c.Visible = center;
+        bool lights = _config.Lights.Enabled;
+        foreach (var c in _lightRows) c.Visible = lights;
+        foreach (var (label, get) in _lightLabels) Show(label, get()?.ToString());
+        foreach (var c in _gameLightRows) c.Visible = lights;
+        if (_shownGame is { } shown)
+        {
+            Show(_lblKeyCycle, shown.KeyLightCycle is { } kc ? Native.KeyName(kc) : null);
+            Show(_lblKeyHigh, shown.KeyHighBeam is { } kh ? Native.KeyName(kh) : null);
+            Show(_lblKeyFlash, shown.KeyFlash is { } kf ? Native.KeyName(kf) : null);
+            if (lights && shown.HighInCycle)
+                foreach (var c in _highRow) c.Visible = false;
+        }
         _cmbBlinks.Enabled = _cmbComfortMs.Enabled = _config.Blinker.ComfortEnabled;
     }
 
@@ -351,22 +412,41 @@ public sealed class MainForm : Form
         }));
     }
 
-    private void CaptureKey(bool left)
+    private void CaptureKey(bool left) =>
+        CaptureGameKey(left ? _lblKeyLeft : _lblKeyRight, (g, k) => { if (left) g.KeyLeft = k; else g.KeyRight = k; });
+
+    private void CaptureGameKey(Label label, Action<GameProfile, KeyBinding> assign)
     {
         _engine?.CancelDetect();
         _detecting = null;
         ShowBindings();
         if (_shownGame is not { } game) return;
-        var label = left ? _lblKeyLeft : _lblKeyRight;
         label.Text = "Appuie sur la touche…";
         label.ForeColor = Theme.Accent;
         ActiveControl = null;
         _keyCapture = key =>
         {
-            if (left) game.KeyLeft = key; else game.KeyRight = key;
+            assign(game, key);
             _config.Save();
             FillGames();
         };
+    }
+
+    /// <summary>Commodo Moza : phares sur les boutons 1 à 6 du même périphérique que les clignotants.</summary>
+    private void MozaLights()
+    {
+        var device = _config.StalkLeft ?? _config.StalkRight;
+        if (device == null)
+        {
+            MessageBox.Show(this, "Configure d'abord les clignotants : le préréglage utilise le même commodo.",
+                "StalkSync", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        ButtonBinding B(int n) => new() { Device = device.Device, DeviceName = device.DeviceName, Button = n - 1 };
+        var l = _config.Lights;
+        (l.Off, l.Parking, l.Low, l.High, l.Neutral, l.Flash) = (B(1), B(2), B(3), B(4), B(5), B(6));
+        _config.Save();
+        ShowBindings();
     }
 
     /// <summary>Remplit la liste des jeux en gardant la sélection.</summary>
@@ -462,6 +542,19 @@ public sealed class MainForm : Form
             _ => "au centre",
         } + (s.Desired != s.Assumed && s.Game == null ? " · en attente du jeu" : "");
         _lblAction.Text = s.LastAction == "—" ? "Aucune touche envoyée" : "Dernière touche : " + s.LastAction;
+        _lblLights.Visible = s.LightsEnabled;
+        if (s.LightsEnabled)
+            _lblLights.Text = "Feux : " + s.Ring switch
+            {
+                LightState.Parking => "veilleuses",
+                LightState.Low => "croisement",
+                _ => "éteints",
+            } + s.Beam switch
+            {
+                BeamPosition.High => " · pleins phares",
+                BeamPosition.Flash => " · appel de phare",
+                _ => "",
+            };
 
         string? warning = s.Devices == 0 ? "Aucun périphérique de jeu détecté."
             : s.Game is { Ready: false } g ? $"Touches de clignotant non définies pour {Config.ShortName(g)}."

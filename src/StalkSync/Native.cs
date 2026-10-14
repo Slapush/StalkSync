@@ -82,6 +82,26 @@ static class Native
         for (int i = modifiers.Count - 1; i >= 0; i--) Send(modifiers[i], KeyScanCode | KeyUp);
     }
 
+    /// <summary>Enfonce ou relâche une touche avec ses modificateurs, pour les actions maintenues (appel de phare).</summary>
+    public static void SetKey(KeyBinding key, bool down)
+    {
+        var modifiers = new List<ushort>();
+        if (key.Ctrl) modifiers.Add(ScanCtrl);
+        if (key.Shift) modifiers.Add(ScanShift);
+        if (key.Alt) modifiers.Add(ScanAlt);
+        uint flags = KeyScanCode | (key.Extended ? KeyExtended : 0);
+        if (down)
+        {
+            foreach (var m in modifiers) Send(m, KeyScanCode);
+            Send(key.ScanCode, flags);
+        }
+        else
+        {
+            Send(key.ScanCode, flags | KeyUp);
+            for (int i = modifiers.Count - 1; i >= 0; i--) Send(modifiers[i], KeyScanCode | KeyUp);
+        }
+    }
+
     private static void Send(ushort scan, uint flags)
     {
         var input = new[] { new Input { Type = InputKeyboard, Key = new KeybdInput { Scan = scan, Flags = flags } } };

@@ -28,6 +28,8 @@ Testé avec le commodo Moza Multi-function Stalks dans ETS2.
 - **Clignotements confort** : un appui bref donne 3 clignotements (nombre et durée réglables).
 - **Trois types de commodo** : maintenu (reste en position), impulsion (revient au centre), ou un bouton
   par position (Moza : une impulsion en arrivant à gauche, au centre ou à droite).
+- **Phares (bêta)** : éteint, veilleuses, croisement, pleins phares et appel de phare maintenu tant que le
+  commodo est tiré. Préréglage pour le commodo Moza (boutons 1 à 6).
 - **Plusieurs jeux** : chacun a ses touches, et StalkSync reconnaît le jeu au premier plan.
 - **Aucune touche envoyée** si la fenêtre active n'est pas un jeu de la liste : StalkSync attend que le jeu repasse au premier plan.
 
@@ -39,6 +41,10 @@ Testé avec le commodo Moza Multi-function Stalks dans ETS2.
 | BeamNG.drive | `,` et `.` | |
 | Assetto Corsa | à définir | Clignotants ajoutés par Custom Shaders Patch : leur assigner une touche dans les commandes. |
 | Assetto Corsa Competizione | `Alt + ←` et `Alt + →` | |
+
+Phares (bêta) : ETS2 / ATS utilisent `L` (mode des feux), `K` (pleins phares) et `J` (appel de phare).
+BeamNG.drive utilise `N` (éteint → croisement → pleins phares, sans veilleuses) ; l'appel de phare n'y a
+pas de touche par défaut : assigner `K` à « Flash high beam » dans Options → Contrôles.
 
 Pour un autre jeu : lancer le jeu, cliquer **Ajouter…** dans la carte *Jeux*, choisir sa fenêtre, puis
 définir les touches de clignotant réglées dans ce jeu.

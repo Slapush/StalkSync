@@ -6,7 +6,8 @@ namespace StalkSync;
 /// <param name="Game">Jeu au premier plan, ou null.</param>
 public sealed record EngineStatus(
     GameProfile? Game, Side Stalk, bool LeftFound, bool RightFound, bool CenterFound,
-    Side Desired, Side Assumed, bool Comfort, int Devices, string LastAction);
+    Side Desired, Side Assumed, bool Comfort, int Devices, string LastAction,
+    bool LightsEnabled, LightState Ring, BeamPosition Beam);
 
 /// <summary>Boucle de fond : lit le commodo, puis envoie les touches nécessaires.</summary>
 public sealed class Engine : IDisposable
@@ -21,6 +22,10 @@ public sealed class Engine : IDisposable
     private volatile bool _reset;
     private GameProfile? _lastGame;
     private readonly PulseStalk _pulse = new();
+    private readonly LightStalk _lightStalk = new();
+    private readonly Dictionary<GameProfile, LightController> _lights = new();
+    // Touche d'appel de phare enfoncée, par jeu, pour relâcher exactement celle-là.
+    private readonly Dictionary<GameProfile, KeyBinding> _heldFlash = new();
     private string _lastAction = "—";
 
     private Action<ButtonBinding>? _detect;
@@ -67,6 +72,9 @@ public sealed class Engine : IDisposable
             catch (Exception e) { _lastAction = "Erreur : " + e.Message; }
             Thread.Sleep(15);
         }
+        // Fermeture : ne jamais laisser une touche d'appel de phare enfoncée.
+        foreach (var key in _heldFlash.Values) Native.SetKey(key, false);
+        _heldFlash.Clear();
     }
 
     private void Tick()
@@ -140,6 +148,18 @@ public sealed class Engine : IDisposable
         }
         foreach (var gone in _controllers.Keys.Where(g => !games.Contains(g)).ToList())
             _controllers.Remove(gone);
+        foreach (var gone in _lights.Keys.Where(g => !games.Contains(g)).ToList())
+        {
+            if (_heldFlash.Remove(gone, out var held)) Native.SetKey(held, false);
+            _lights.Remove(gone);
+        }
+
+        var lights = _config.Lights;
+        if (lights.Enabled)
+            _lightStalk.Update(
+                IsPressed(devices, lights.Off, out _), IsPressed(devices, lights.Parking, out _),
+                IsPressed(devices, lights.Low, out _), IsPressed(devices, lights.High, out _),
+                IsPressed(devices, lights.Flash, out _), IsPressed(devices, lights.Neutral, out _));
 
         var process = Native.ForegroundProcess();
         GameProfile? focused = process == null ? null
@@ -150,15 +170,54 @@ public sealed class Engine : IDisposable
         foreach (var game in games)
         {
             var action = ControllerFor(game).Update(now, left, right, game == focused && game.Ready);
-            if (action == BlinkerAction.None) continue;
-            Native.TapKey(action == BlinkerAction.TapLeft ? game.KeyLeft! : game.KeyRight!);
-            _lastAction = $"{DateTime.Now:HH:mm:ss} {(action == BlinkerAction.TapLeft ? "gauche" : "droite")} → {game.Name}";
+            if (action != BlinkerAction.None)
+            {
+                Native.TapKey(action == BlinkerAction.TapLeft ? game.KeyLeft! : game.KeyRight!);
+                _lastAction = $"{DateTime.Now:HH:mm:ss} {(action == BlinkerAction.TapLeft ? "gauche" : "droite")} → {game.Name}";
+            }
+            UpdateLights(game, now, lights.Enabled && game == focused && game.Enabled);
         }
 
         var shown = ControllerFor(_lastGame is { } last && games.Contains(last) ? last : games[0]);
         var stalk = left == right ? Side.Off : left ? Side.Left : Side.Right;
         Status = new EngineStatus(focused, stalk, leftFound, rightFound, centerFound,
-            shown.Desired, shown.Assumed, shown.ComfortActive, devices.Count, _lastAction);
+            shown.Desired, shown.Assumed, shown.ComfortActive, devices.Count, _lastAction,
+            lights.Enabled, _lightStalk.Ring, _lightStalk.Beam);
+    }
+
+    private void UpdateLights(GameProfile game, long now, bool canSend)
+    {
+        if (!_lights.TryGetValue(game, out var c))
+            _lights[game] = c = new LightController();
+
+        // Touche d'appel changée pendant un appel : on relâche l'ancienne.
+        if (_heldFlash.TryGetValue(game, out var held) && held != game.KeyFlash)
+        {
+            Native.SetKey(held, false);
+            _heldFlash.Remove(game);
+            c.FlashWasReleased();
+        }
+
+        var action = c.Update(now, _lightStalk.Ring, _lightStalk.Beam, game.LightKeys, canSend);
+        switch (action)
+        {
+            case LightAction.Cycle:
+                Native.TapKey(game.KeyLightCycle!);
+                _lastAction = $"{DateTime.Now:HH:mm:ss} feux → {game.Name}";
+                break;
+            case LightAction.HighToggle:
+                Native.TapKey(game.KeyHighBeam!);
+                _lastAction = $"{DateTime.Now:HH:mm:ss} pleins phares → {game.Name}";
+                break;
+            case LightAction.FlashPress:
+                _heldFlash[game] = game.KeyFlash!;
+                Native.SetKey(game.KeyFlash!, true);
+                _lastAction = $"{DateTime.Now:HH:mm:ss} appel de phare → {game.Name}";
+                break;
+            case LightAction.FlashRelease:
+                if (_heldFlash.Remove(game, out var key)) Native.SetKey(key, false);
+                break;
+        }
     }
 
     private static bool IsPressed(Dictionary<Guid, (string Name, bool[] Buttons)> devices, ButtonBinding? b, out bool found)

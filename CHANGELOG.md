@@ -1,5 +1,11 @@
 # Changements
 
+## 0.4.0-beta.1 (pré-version de test)
+- Gestion des phares avec le commodo (bêta) : éteint, veilleuses, croisement, pleins phares et appel de phare.
+- Préréglage Moza : boutons 1 (éteint), 2 (veilleuses), 3 (croisement), 4 (pleins phares), 5 (retour au neutre), 6 (appel).
+- ETS2 / ATS : touches L (mode des feux), K (pleins phares), J (appel de phare).
+- BeamNG.drive : touche N (éteint → croisement → pleins phares) et appel de phare sur K, à assigner à « Flash high beam ».
+
 ## 0.3.1
 - Logo de StalkSync dans l'exécutable, la fenêtre et la zone de notification.
 - Informations de produit dans les propriétés du fichier.
