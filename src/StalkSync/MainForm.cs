@@ -22,6 +22,8 @@ public sealed class MainForm : Form
     private Label? _detecting;
 
     private readonly Pill _pill = new();
+    private readonly Label _lblDevice;
+    private readonly ToolTip _tips = new();
     private readonly Lamp _lampLeft, _lampRight;
     private readonly Label _lblState, _lblStalk, _lblAction, _lblWarning;
     private readonly Label _lblStalkLeft, _lblStalkCenter, _lblStalkRight, _lblKeyLeft, _lblKeyRight, _lblGameHint;
@@ -58,7 +60,8 @@ public sealed class MainForm : Form
         KeyPreview = true;
         Padding = new Padding(S(20), S(16), S(20), S(8));
 
-        int width = S(560);
+        // Trois colonnes de cartes : la fenêtre tient en hauteur sur un écran 1080p.
+        int col = S(400), gap = S(14), width = col * 3 + gap * 2;
         var root = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true,
@@ -78,11 +81,24 @@ public sealed class MainForm : Form
         header.Controls.Add(_pill, 1, 0);
         root.Controls.Add(header);
 
+        var columns = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, Margin = Padding.Empty,
+        };
+        FlowLayoutPanel Column(bool last) => new()
+        {
+            FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true,
+            Margin = new Padding(0, 0, last ? 0 : gap, 0),
+        };
+        FlowLayoutPanel col1 = Column(false), col2 = Column(false), col3 = Column(true);
+        columns.Controls.AddRange([col1, col2, col3]);
+        root.Controls.Add(columns);
+
         // Tableau de bord : les deux voyants et l'état du commodo.
-        int lampCol = S(100);
-        var dash = new Card(null, width, lampCol, 0, lampCol);
-        _lampLeft = new Lamp(S(76)) { PointsLeft = true };
-        _lampRight = new Lamp(S(76));
+        int lampCol = S(80);
+        var dash = new Card(null, col, lampCol, 0, lampCol);
+        _lampLeft = new Lamp(S(64)) { PointsLeft = true };
+        _lampRight = new Lamp(S(64));
         _lblState = Centered(Theme.Heading, Theme.Text);
         _lblStalk = Centered(Theme.Body, Theme.Muted);
         _lblAction = Centered(Theme.Small, Theme.Muted);
@@ -97,11 +113,11 @@ public sealed class MainForm : Form
         _lblWarning.Margin = new Padding(0, S(8), 0, 0);
         _lblWarning.Visible = false;
         dash.Row(_lblWarning);
-        root.Controls.Add(dash);
+        col1.Controls.Add(dash);
 
         // Commodo.
-        int labelCol = S(150), buttonCol = S(100);
-        var stalk = new Card("Commodo", width, labelCol, 0, buttonCol);
+        int labelCol = S(140), buttonCol = S(96);
+        var stalk = new Card("Commodo", col, labelCol, 0, buttonCol);
         _cmbMode = Theme.Combo(stalk.InnerWidth - labelCol);
         _cmbMode.Dock = DockStyle.Fill;
         _cmbMode.Items.AddRange(new object[]
@@ -121,10 +137,12 @@ public sealed class MainForm : Form
             DetectStalk(_lblStalkCenter, "Ramène au centre…", b => _config.StalkCenter = b)));
         stalk.Row(Theme.Label("Droite"), _lblStalkRight, Theme.Button("Détecter", (_, _) =>
             DetectStalk(_lblStalkRight, "Pousse à fond à droite…", b => _config.StalkRight = b)));
-        root.Controls.Add(stalk);
+        _lblDevice = Hint(stalk.InnerWidth, "");
+        stalk.Row(_lblDevice);
+        col2.Controls.Add(stalk);
 
         // Phares : un bouton par position du commodo (Moza : 1 à 6).
-        var lightCard = new Card("Phares", width, labelCol, 0, buttonCol);
+        var lightCard = new Card("Phares", col, labelCol, 0, buttonCol);
         lightCard.Row(_tglLights);
         _lightRows.AddRange(lightCard.Row(Theme.Label("Préréglage"),
             Theme.Label("Moza : boutons 1 à 6", Theme.Body, Theme.Muted), Theme.Button("Appliquer", (_, _) => MozaLights())));
@@ -150,12 +168,12 @@ public sealed class MainForm : Form
             _config.Save();
             ShowBindings();
         };
-        root.Controls.Add(lightCard);
+        col2.Controls.Add(lightCard);
 
         // Touches du jeu.
         // Jeux : chacun a ses touches de clignotant.
-        var keys = new Card("Jeux", width, labelCol, 0, buttonCol);
-        _cmbGame = Theme.Combo(keys.InnerWidth - labelCol - buttonCol);
+        var keys = new Card("Jeux", col, labelCol, 0, buttonCol);
+        _cmbGame = Theme.Combo(keys.InnerWidth - buttonCol);
         _cmbGame.Dock = DockStyle.Fill;
         _cmbGame.Margin = new Padding(0, 3, S(8), 3);
         _cmbGame.SelectedIndexChanged += (_, _) => ShowGame();
@@ -165,7 +183,9 @@ public sealed class MainForm : Form
             FillAddMenu();
             _addMenu.Show(add, new Point(0, add.Height));
         });
-        keys.Row(Theme.Label("Jeu"), _cmbGame, add);
+        keys.RowAt(0, _cmbGame);
+        keys.Grid.SetColumnSpan(_cmbGame, 2);
+        keys.Grid.Controls.Add(add, 2, keys.Grid.RowCount - 1);
         _btnRemoveGame = Theme.Button("Retirer", (_, _) => RemoveGame());
         keys.RowAt(0, _tglGameEnabled);
         keys.Grid.SetColumnSpan(_tglGameEnabled, 2);
@@ -193,10 +213,10 @@ public sealed class MainForm : Form
             _config.Save();
             FillGames();
         };
-        root.Controls.Add(keys);
+        col3.Controls.Add(keys);
 
         // Options.
-        var options = new Card("Options", width, S(260), 0);
+        var options = new Card("Options", col, S(250), 0);
         _cmbBlinks = Theme.Combo(S(90));
         _cmbBlinks.Items.AddRange(Enumerable.Range(1, 9).Select(i => (object)i.ToString()).ToArray());
         _cmbComfortMs = Theme.Combo(S(90));
@@ -205,7 +225,7 @@ public sealed class MainForm : Form
         options.Row(Theme.Label("Nombre de clignotements"), _cmbBlinks);
         options.Row(Theme.Label("Durée max. de l'appui bref"), _cmbComfortMs);
         options.Row(_tglMinimized);
-        root.Controls.Add(options);
+        col1.Controls.Add(options);
 
         var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         root.Controls.Add(WithMargin(Theme.Label(
@@ -373,16 +393,22 @@ public sealed class MainForm : Form
             l.Text = text ?? "Non configuré";
             l.ForeColor = text == null ? Theme.Muted : Theme.Text;
         }
-        Show(_lblStalkLeft, _config.StalkLeft?.ToString());
-        Show(_lblStalkCenter, _config.StalkCenter?.ToString());
-        Show(_lblStalkRight, _config.StalkRight?.ToString());
+        void ShowButton(Label l, ButtonBinding? b)
+        {
+            Show(l, b == null ? null : $"Bouton {string.Join(" + ", b.All.Select(i => i + 1))}");
+            _tips.SetToolTip(l, b?.ToString());
+        }
+        ShowButton(_lblStalkLeft, _config.StalkLeft);
+        ShowButton(_lblStalkCenter, _config.StalkCenter);
+        ShowButton(_lblStalkRight, _config.StalkRight);
+        _lblDevice.Text = (_config.StalkLeft ?? _config.StalkRight) is { } dev ? "Périphérique : " + dev.DeviceName : "";
         Show(_lblKeyLeft, _shownGame?.KeyLeft is { } kl ? Native.KeyName(kl) : null);
         Show(_lblKeyRight, _shownGame?.KeyRight is { } kr ? Native.KeyName(kr) : null);
         bool center = _config.Blinker.Mode == StalkMode.Positions;
         foreach (var c in _centerRow) c.Visible = center;
         bool lights = _config.Lights.Enabled;
         foreach (var c in _lightRows) c.Visible = lights;
-        foreach (var (label, get) in _lightLabels) Show(label, get()?.ToString());
+        foreach (var (label, get) in _lightLabels) ShowButton(label, get());
         foreach (var c in _gameLightRows) c.Visible = lights;
         if (_shownGame is { } shown)
         {

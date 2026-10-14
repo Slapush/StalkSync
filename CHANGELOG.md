@@ -1,5 +1,9 @@
 # Changements
 
+## 0.4.0-beta.2 (pré-version de test)
+- Fenêtre en largeur sur trois colonnes : elle tient sur un écran 1080p.
+- Les boutons du commodo s'affichent en court (« Bouton 10 »), le périphérique une seule fois.
+
 ## 0.4.0-beta.1 (pré-version de test)
 - Gestion des phares avec le commodo (bêta) : éteint, veilleuses, croisement, pleins phares et appel de phare.
 - Préréglage Moza : boutons 1 (éteint), 2 (veilleuses), 3 (croisement), 4 (pleins phares), 5 (retour au neutre), 6 (appel).
