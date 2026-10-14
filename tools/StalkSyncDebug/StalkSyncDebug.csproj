@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <Version>0.4.0-beta.6</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
+    <ApplicationIcon>..\..\src\StalkSync\Assets\StalkSync.ico</ApplicationIcon>
+    <Product>StalkSync Debug</Product>
+    <Description>Rapport de diagnostic pour StalkSync</Description>
+    <Authors>Slapush</Authors>
+    <Copyright>Copyright © 2026 Slapush</Copyright>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\StalkSync\Ui.cs" Link="Shared\Ui.cs" />
+    <Compile Include="..\..\src\StalkSync\StalkInput.cs" Link="Shared\StalkInput.cs" />
+    <EmbeddedResource Include="..\..\src\StalkSync\Assets\StalkSync.ico" LogicalName="StalkSync.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpDX.DirectInput" Version="4.2.0" />
+  </ItemGroup>
+</Project>

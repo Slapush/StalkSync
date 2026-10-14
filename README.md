@@ -92,6 +92,12 @@ plateforme en ligne utilisée (TruckersMP, serveurs Assetto Corsa…).
 Ouvrir une [issue](https://github.com/Slapush/StalkSync/issues/new/choose) en précisant le jeu,
 le modèle de commodo, le type choisi dans StalkSync et, si possible, une capture de la fenêtre.
 
+Pour un problème difficile à décrire, `StalkSyncDebug.exe` (dans les Releases) enregistre une session :
+lancer StalkSync et le jeu, cliquer **Démarrer**, reproduire le problème en ajoutant des **repères**, puis
+**Arrêter**. Un rapport `StalkSync-debug-….json` est créé sur le Bureau, à joindre à l'issue. Il contient
+les boutons du commodo, la télémétrie BeamNG, les décisions de StalkSync, le jeu au premier plan et les
+touches arrivées dans un jeu (rien de ce qui est tapé ailleurs), ainsi que les réglages de StalkSync.
+
 ## Développement
 
 Prérequis : [SDK .NET 8](https://dotnet.microsoft.com/download/dotnet/8.0). La solution `StalkSync.sln`
@@ -103,7 +109,8 @@ dotnet publish src/StalkSync -c Release -r win-x64 --self-contained -p:PublishSi
 ```
 
 - `src/StalkSync.Core` : logique de décision, sans dépendance Windows, testée.
-- `src/StalkSync` : application WinForms (.NET 8) — DirectInput, `SendInput`.
+- `src/StalkSync` : application WinForms (.NET 8) — DirectInput, `SendInput`, télémétrie OutGauge.
+- `tools/StalkSyncDebug` : outil de diagnostic qui produit un rapport JSON.
 - Réglages enregistrés dans `%AppData%\StalkSync\config.json`.
 
 ## Licence

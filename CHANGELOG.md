@@ -1,5 +1,11 @@
 # Changements
 
+## 0.4.0-beta.6 (pré-version de test)
+- Télémétrie BeamNG lue sur un fil dédié, dès l'arrivée de chaque paquet : aucun paquet perdu,
+  même à 400 paquets/s. Boucle principale plus réactive (5 ms).
+- Nouvel outil séparé **StalkSyncDebug.exe** : enregistre une session et crée un rapport JSON sur le Bureau.
+  StalkSync lui relaie en local la télémétrie et ses décisions (127.0.0.1:4446).
+
 ## 0.4.0-beta.5 (pré-version de test)
 - BeamNG : le retour pleins phares → croisement ne saccade plus. Une télémétrie lente renvoyait encore
   « pleins phares » juste après les appuis, et StalkSync rappuyait à tort. L'état lu n'est maintenant

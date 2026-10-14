@@ -20,7 +20,14 @@ jobs:
           dotnet publish src/StalkSync -c Release -r win-x64 --self-contained
           -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+      - name: Publication de l'outil de debug
+        run: >-
+          dotnet publish tools/StalkSyncDebug -c Release -r win-x64 --self-contained
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -o publish
       - uses: actions/upload-artifact@v4
         with:
           name: StalkSync
-          path: publish/StalkSync.exe
+          path: |
+            publish/StalkSync.exe
+            publish/StalkSyncDebug.exe

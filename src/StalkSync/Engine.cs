@@ -25,6 +25,11 @@ public sealed class Engine : IDisposable
     private GameProfile? _lastGame;
     private readonly PulseStalk _pulse = new();
     private readonly OutGauge _outGauge;
+    private readonly DebugMirror _debug = new();
+    private Side _lastStalkSide;
+    private LightState _lastRing;
+    private BeamPosition _lastBeam;
+    private string? _lastFocus;
     private readonly LightStalk _lightStalk = new();
     private readonly Dictionary<GameProfile, LightController> _lights = new();
     // Touche d'appel de phare enfoncée, par jeu, pour relâcher exactement celle-là.
@@ -43,7 +48,7 @@ public sealed class Engine : IDisposable
     {
         _config = config;
         _input = new StalkInput(hwnd);
-        _outGauge = new OutGauge(config.OutGaugePort);
+        _outGauge = new OutGauge(config.OutGaugePort, () => _clock.ElapsedMilliseconds, _debug.Packet);
         _thread = new Thread(Loop) { IsBackground = true, Name = "StalkSync" };
         _thread.Start();
     }
@@ -74,7 +79,7 @@ public sealed class Engine : IDisposable
         {
             try { Tick(); }
             catch (Exception e) { _lastAction = "Erreur : " + e.Message; }
-            Thread.Sleep(15);
+            Thread.Sleep(5);
         }
         // Fermeture : ne jamais laisser une touche d'appel de phare enfoncée.
         foreach (var key in _heldFlash.Values) Native.SetKey(key, false);
@@ -172,17 +177,36 @@ public sealed class Engine : IDisposable
 
         var beamNg = _outGauge.Read(now);
 
+        // Journal pour l'outil de debug : position du commodo et jeu au premier plan.
+        var stalkSide = left == right ? Side.Off : left ? Side.Left : Side.Right;
+        if (stalkSide != _lastStalkSide) _debug.Event(now, "commodo", new { position = stalkSide.ToString() });
+        if (lights.Enabled && (_lightStalk.Ring != _lastRing || _lightStalk.Beam != _lastBeam))
+            _debug.Event(now, "commodo-phares", new { bague = _lightStalk.Ring.ToString(), levier = _lightStalk.Beam.ToString() });
+        if (focused?.Name != _lastFocus) _debug.Event(now, "premier-plan", new { jeu = focused?.Name, processus = process });
+        (_lastStalkSide, _lastRing, _lastBeam, _lastFocus) = (stalkSide, _lightStalk.Ring, _lightStalk.Beam, focused?.Name);
+
         // Tous les jeux suivent le commodo, mais seul celui au premier plan reçoit des touches.
         foreach (var game in games)
         {
             var telemetry = Config.IsBeamNg(game) ? beamNg : null;
             // Télémétrie : on recale l'état supposé sur l'état réel ; warnings allumés → on ne touche à rien.
-            if (telemetry is { Hazard: false } t) ControllerFor(game).Observe(now, t.Signal);
+            if (telemetry is { Hazard: false } t)
+            {
+                var before = ControllerFor(game).Assumed;
+                ControllerFor(game).Observe(now, t.Signal);
+                if (ControllerFor(game).Assumed != before)
+                    _debug.Event(now, "recalage-clignotant", new { jeu = game.Name, avant = before.ToString(), apres = t.Signal.ToString() });
+            }
             bool canBlink = game == focused && game.Ready && telemetry is not { Hazard: true };
             var action = ControllerFor(game).Update(now, left, right, canBlink);
             if (action != BlinkerAction.None)
             {
                 Native.TapKey(action == BlinkerAction.TapLeft ? game.KeyLeft! : game.KeyRight!);
+                _debug.Event(now, "touche-clignotant", new
+                {
+                    jeu = game.Name, cote = action == BlinkerAction.TapLeft ? "gauche" : "droite",
+                    voulu = ControllerFor(game).Desired.ToString(), suppose = ControllerFor(game).Assumed.ToString(),
+                });
                 _lastAction = $"{DateTime.Now:HH:mm:ss} {(action == BlinkerAction.TapLeft ? "gauche" : "droite")} → {game.Name}";
             }
             UpdateLights(game, now, lights.Enabled && game == focused && game.Enabled, telemetry);
@@ -203,7 +227,17 @@ public sealed class Engine : IDisposable
     {
         if (!_lights.TryGetValue(game, out var c))
             _lights[game] = c = new LightController();
-        if (telemetry is { } t) c.Observe(now, game.LightCycle, t.High, t.Low);
+        if (telemetry is { } t)
+        {
+            var (cycleBefore, highBefore) = (c.AssumedCycle, c.AssumedHigh);
+            c.Observe(now, game.LightCycle, t.High, t.Low);
+            if (c.AssumedCycle != cycleBefore || c.AssumedHigh != highBefore)
+                _debug.Event(now, "recalage-phares", new
+                {
+                    jeu = game.Name, avant = cycleBefore.ToString(), apres = c.AssumedCycle.ToString(),
+                    pleinsPharesAvant = highBefore, pleinsPharesApres = c.AssumedHigh, telemetrie = $"0x{t.ShowLights:X4}",
+                });
+        }
 
         // Touche d'appel changée pendant un appel : on relâche l'ancienne.
         if (_heldFlash.TryGetValue(game, out var held) && held != game.KeyFlash)
@@ -215,6 +249,12 @@ public sealed class Engine : IDisposable
 
         var ring = _config.Lights.SkipParking && _lightStalk.Ring == LightState.Parking ? LightState.Off : _lightStalk.Ring;
         var action = c.Update(now, ring, _lightStalk.Beam, game.LightKeys, canSend);
+        if (action != LightAction.None)
+            _debug.Event(now, "touche-phares", new
+            {
+                jeu = game.Name, action = action.ToString(), suppose = c.AssumedCycle.ToString(),
+                pleinsPhares = c.AssumedHigh, bague = ring.ToString(), levier = _lightStalk.Beam.ToString(),
+            });
         switch (action)
         {
             case LightAction.Cycle:
@@ -250,5 +290,6 @@ public sealed class Engine : IDisposable
         _thread.Join(500);
         _input.Dispose();
         _outGauge.Dispose();
+        _debug.Dispose();
     }
 }
