@@ -15,6 +15,8 @@ static class Theme
     public static readonly Color Accent = Color.FromArgb(0x3D, 0xDC, 0x84);
     public static readonly Color AccentDim = Color.FromArgb(0x24, 0x4A, 0x36);
     public static readonly Color Warning = Color.FromArgb(0xF5, 0xA6, 0x23);
+    public static readonly Color Blue = Color.FromArgb(0x3D, 0x8B, 0xFF);
+    public static readonly Color BlueDim = Color.FromArgb(0x1C, 0x33, 0x5C);
     public static readonly Color LampOff = Color.FromArgb(0x33, 0x39, 0x45);
 
     public static readonly Font Body = new("Segoe UI", 9.75f);
@@ -221,6 +223,76 @@ sealed class Lamp : Control
             for (int i = 0; i < pts.Length; i++) pts[i].X = w - pts[i].X;
         using var arrow = new SolidBrush(_lit ? Theme.Accent : Theme.LampOff);
         g.FillPolygon(arrow, pts);
+    }
+}
+
+public enum LampKind { Parking, Low, High }
+
+/// <summary>Voyant de feux façon tableau de bord : veilleuses et croisement en vert, pleins phares en bleu.</summary>
+sealed class LightLamp : Control
+{
+    private bool _lit;
+    private readonly LampKind _kind;
+
+    public LightLamp(LampKind kind, int size)
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+        _kind = kind;
+        Size = new Size(size, size);
+        BackColor = Theme.Card;
+        Margin = new Padding(size / 6, 0, size / 6, 0);
+    }
+
+    public bool Lit
+    {
+        get => _lit;
+        set { if (_lit != value) { _lit = value; Invalidate(); } }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        float w = Width, h = Height, m = w * 0.06f;
+        var (on, dim) = _kind == LampKind.High ? (Theme.Blue, Theme.BlueDim) : (Theme.Accent, Theme.AccentDim);
+        using var halo = new SolidBrush(_lit ? dim : Theme.Input);
+        g.FillEllipse(halo, m, m, w - 2 * m, h - 2 * m);
+        var color = _lit ? on : Theme.LampOff;
+        if (_kind == LampKind.Parking)
+        {
+            // Veilleuses : deux petits phares dos à dos avec des rayons courts.
+            DrawLamp(g, new RectangleF(w * 0.14f, h * 0.32f, w * 0.34f, h * 0.36f), color, rays: 3, slant: 0, mirror: true);
+            DrawLamp(g, new RectangleF(w * 0.52f, h * 0.32f, w * 0.34f, h * 0.36f), color, rays: 3, slant: 0, mirror: false);
+        }
+        else
+            DrawLamp(g, new RectangleF(w * 0.18f, h * 0.26f, w * 0.64f, h * 0.48f), color, rays: 4,
+                slant: _kind == LampKind.Low ? 0.28f : 0, mirror: false);
+    }
+
+    /// <summary>Phare en « D » avec des rayons : droits pour les pleins phares, inclinés vers le bas pour le croisement.</summary>
+    private static void DrawLamp(Graphics g, RectangleF r, Color color, int rays, float slant, bool mirror)
+    {
+        float stroke = Math.Max(1.5f, r.Height * 0.12f);
+        using var pen = new Pen(color, stroke) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        float lensX = r.X + r.Width * 0.52f, lensW = r.Width * 0.44f;
+        using var lens = new GraphicsPath();
+        lens.AddLine(lensX, r.Y, lensX, r.Bottom);
+        lens.AddArc(lensX - lensW, r.Y, lensW * 2, r.Height, 90, -180);
+        lens.CloseFigure();
+        var state = g.Save();
+        if (mirror)
+        {
+            g.TranslateTransform(r.X * 2 + r.Width, 0);
+            g.ScaleTransform(-1, 1);
+        }
+        using (var fill = new SolidBrush(color)) g.FillPath(fill, lens);
+        for (int i = 0; i < rays; i++)
+        {
+            float y = r.Y + r.Height * (0.14f + i * (0.72f / Math.Max(1, rays - 1)));
+            float x1 = lensX - r.Width * 0.1f;
+            g.DrawLine(pen, r.X, y + r.Height * slant, x1, y);
+        }
+        g.Restore(state);
     }
 }
 

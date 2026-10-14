@@ -7,7 +7,9 @@ namespace StalkSync;
 public sealed record EngineStatus(
     GameProfile? Game, Side Stalk, bool LeftFound, bool RightFound, bool CenterFound,
     Side Desired, Side Assumed, bool Comfort, int Devices, string LastAction,
-    bool LightsEnabled, LightState Ring, BeamPosition Beam);
+    bool LightsEnabled, LightState Ring, BeamPosition Beam,
+    LightState ShownCycle, bool ShownHigh, bool ShownFlash, bool ShownHighInCycle,
+    BeamNgState? Telemetry, string? TelemetryError, int TelemetryPort);
 
 /// <summary>Boucle de fond : lit le commodo, puis envoie les touches nécessaires.</summary>
 public sealed class Engine : IDisposable
@@ -22,6 +24,7 @@ public sealed class Engine : IDisposable
     private volatile bool _reset;
     private GameProfile? _lastGame;
     private readonly PulseStalk _pulse = new();
+    private readonly OutGauge _outGauge;
     private readonly LightStalk _lightStalk = new();
     private readonly Dictionary<GameProfile, LightController> _lights = new();
     // Touche d'appel de phare enfoncée, par jeu, pour relâcher exactement celle-là.
@@ -40,6 +43,7 @@ public sealed class Engine : IDisposable
     {
         _config = config;
         _input = new StalkInput(hwnd);
+        _outGauge = new OutGauge(config.OutGaugePort);
         _thread = new Thread(Loop) { IsBackground = true, Name = "StalkSync" };
         _thread.Start();
     }
@@ -166,29 +170,40 @@ public sealed class Engine : IDisposable
             : games.FirstOrDefault(g => g.Enabled && g.Processes.Any(p => p.Equals(process, StringComparison.OrdinalIgnoreCase)));
         if (focused != null) _lastGame = focused;
 
+        var beamNg = _outGauge.Read(now);
+
         // Tous les jeux suivent le commodo, mais seul celui au premier plan reçoit des touches.
         foreach (var game in games)
         {
-            var action = ControllerFor(game).Update(now, left, right, game == focused && game.Ready);
+            var telemetry = Config.IsBeamNg(game) ? beamNg : null;
+            // Télémétrie : on recale l'état supposé sur l'état réel ; warnings allumés → on ne touche à rien.
+            if (telemetry is { Hazard: false } t) ControllerFor(game).Observe(now, t.Signal);
+            bool canBlink = game == focused && game.Ready && telemetry is not { Hazard: true };
+            var action = ControllerFor(game).Update(now, left, right, canBlink);
             if (action != BlinkerAction.None)
             {
                 Native.TapKey(action == BlinkerAction.TapLeft ? game.KeyLeft! : game.KeyRight!);
                 _lastAction = $"{DateTime.Now:HH:mm:ss} {(action == BlinkerAction.TapLeft ? "gauche" : "droite")} → {game.Name}";
             }
-            UpdateLights(game, now, lights.Enabled && game == focused && game.Enabled);
+            UpdateLights(game, now, lights.Enabled && game == focused && game.Enabled, telemetry);
         }
 
-        var shown = ControllerFor(_lastGame is { } last && games.Contains(last) ? last : games[0]);
+        var shownGame = _lastGame is { } last && games.Contains(last) ? last : games[0];
+        var shown = ControllerFor(shownGame);
+        var shownLights = _lights.GetValueOrDefault(shownGame) ?? new LightController();
         var stalk = left == right ? Side.Off : left ? Side.Left : Side.Right;
         Status = new EngineStatus(focused, stalk, leftFound, rightFound, centerFound,
             shown.Desired, shown.Assumed, shown.ComfortActive, devices.Count, _lastAction,
-            lights.Enabled, _lightStalk.Ring, _lightStalk.Beam);
+            lights.Enabled, _lightStalk.Ring, _lightStalk.Beam,
+            shownLights.AssumedCycle, shownLights.AssumedHigh, shownLights.FlashDown, shownGame.HighInCycle,
+            Config.IsBeamNg(shownGame) ? beamNg : null, _outGauge.Error, _outGauge.Port);
     }
 
-    private void UpdateLights(GameProfile game, long now, bool canSend)
+    private void UpdateLights(GameProfile game, long now, bool canSend, BeamNgState? telemetry)
     {
         if (!_lights.TryGetValue(game, out var c))
             _lights[game] = c = new LightController();
+        if (telemetry is { } t) c.Observe(now, game.LightCycle, t.High, t.Low);
 
         // Touche d'appel changée pendant un appel : on relâche l'ancienne.
         if (_heldFlash.TryGetValue(game, out var held) && held != game.KeyFlash)
@@ -233,5 +248,6 @@ public sealed class Engine : IDisposable
         _running = false;
         _thread.Join(500);
         _input.Dispose();
+        _outGauge.Dispose();
     }
 }

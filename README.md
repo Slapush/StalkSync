@@ -49,6 +49,16 @@ pas de touche par défaut : assigner `K` à « Flash high beam » dans Options �
 Pour un autre jeu : lancer le jeu, cliquer **Ajouter…** dans la carte *Jeux*, choisir sa fenêtre, puis
 définir les touches de clignotant réglées dans ce jeu.
 
+## Télémétrie BeamNG.drive
+
+Facultatif, mais conseillé : avec la télémétrie, StalkSync connaît l'état réel des clignotants et des pleins
+phares dans BeamNG et se recale tout seul si le jeu change d'état sans lui (extinction automatique d'un
+clignotant, touche du clavier…). Les voyants de StalkSync clignotent alors au rythme du jeu.
+
+Dans BeamNG.drive : **Options → Autres → Protocoles → OutGauge**, l'activer avec l'adresse `127.0.0.1` et le
+port `4444`. La carte *Jeux* de StalkSync indique quand la télémétrie est reçue. StalkSync ne fait que lire
+ces données ; rien n'est envoyé au jeu.
+
 ## Installation
 
 1. Télécharger `StalkSync.exe` depuis la page [Releases](https://github.com/Slapush/StalkSync/releases)

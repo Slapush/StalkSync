@@ -148,4 +148,17 @@ public class BlinkerControllerTests
         Assert.True(c.ComfortActive);
         Assert.Equal(Side.Left, c.Desired);
     }
+
+    [Fact]
+    public void Telemetry_corrects_assumed_state_after_grace_delay()
+    {
+        var c = Make(StalkMode.Latching);
+        c.Update(0, true, false, true);
+        c.Observe(500, Side.Off);
+        Assert.Equal(Side.Left, c.Assumed);
+        // Le jeu a coupé le clignotant : on le sait, et on le rallume puisque le commodo est toujours à gauche.
+        c.Observe(5000, Side.Off);
+        Assert.Equal(Side.Off, c.Assumed);
+        Assert.Equal(BlinkerAction.TapLeft, c.Update(5010, true, false, true));
+    }
 }

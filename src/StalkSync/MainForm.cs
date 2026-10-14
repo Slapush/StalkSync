@@ -36,7 +36,9 @@ public sealed class MainForm : Form
     private readonly ComboBox _cmbMode, _cmbBlinks, _cmbComfortMs;
     private readonly Toggle _tglComfort = new("Appui bref = clignotements confort");
     private readonly Toggle _tglLights = new("Gérer les phares avec le commodo (bêta)");
-    private readonly Label _lblLights;
+    private readonly Label _lblLights, _lblTelemetry;
+    private readonly LightLamp _lampParking, _lampLow, _lampHigh;
+    private readonly FlowLayoutPanel _lightLamps;
     private readonly List<Control> _lightRows = [];
     private readonly Dictionary<Label, Func<ButtonBinding?>> _lightLabels = [];
     private readonly Label _lblKeyCycle, _lblKeyHigh, _lblKeyFlash;
@@ -105,10 +107,21 @@ public sealed class MainForm : Form
         dash.Row(_lampLeft, _lblState, _lampRight);
         dash.RowAt(1, _lblStalk);
         dash.RowAt(1, _lblAction);
-        _lblLights = Centered(Theme.Body, Theme.Accent);
+        _lblLights = Centered(Theme.Body, Theme.Muted);
         dash.RowAt(1, _lblLights);
+        // Voyants de phares, comme sur un tableau de bord.
+        _lampParking = new LightLamp(LampKind.Parking, S(40));
+        _lampLow = new LightLamp(LampKind.Low, S(40));
+        _lampHigh = new LightLamp(LampKind.High, S(40));
+        _lightLamps = new FlowLayoutPanel
+        {
+            AutoSize = true, WrapContents = false, BackColor = Theme.Card, Anchor = AnchorStyles.None,
+            Margin = new Padding(0, S(4), 0, 0),
+        };
+        _lightLamps.Controls.AddRange([_lampParking, _lampLow, _lampHigh]);
+        dash.RowAt(1, _lightLamps);
         foreach (var lamp in new[] { _lampLeft, _lampRight })
-            dash.Grid.SetRowSpan(lamp, 4);
+            dash.Grid.SetRowSpan(lamp, 5);
         _lblWarning = Theme.Label("", Theme.Body, Theme.Warning);
         _lblWarning.Margin = new Padding(0, S(8), 0, 0);
         _lblWarning.Visible = false;
@@ -206,6 +219,9 @@ public sealed class MainForm : Form
             Theme.Button("Définir", (_, _) => CaptureGameKey(_lblKeyFlash, (g, k) => g.KeyFlash = k))));
         _lblGameHint = Hint(keys.InnerWidth, "");
         keys.Row(_lblGameHint);
+        _lblTelemetry = Hint(keys.InnerWidth, "");
+        _lblTelemetry.Font = Theme.Body;
+        keys.Row(_lblTelemetry);
         _tglGameEnabled.CheckedChanged += (_, _) =>
         {
             if (_loading || _shownGame == null) return;
@@ -548,12 +564,15 @@ public sealed class MainForm : Form
     {
         if (!Visible || _engine?.Status is not { } s) return;
 
-        _pill.Set(s.Game is { } focused ? "▶  " + Config.ShortName(focused) : "Aucun jeu au premier plan",
+        _pill.Set(s.Game is { } focused
+                ? "▶  " + Config.ShortName(focused) + (Config.IsBeamNg(focused) && s.Telemetry != null ? " · télémétrie" : "")
+                : "Aucun jeu au premier plan",
             s.Game != null ? Theme.Accent : Theme.Muted);
 
         bool phase = Environment.TickCount64 / 400 % 2 == 0;
-        _lampLeft.Lit = s.Assumed == Side.Left && phase;
-        _lampRight.Lit = s.Assumed == Side.Right && phase;
+        // Avec la télémétrie, les voyants clignotent au rythme réel du jeu.
+        _lampLeft.Lit = s.Telemetry is { } tl ? tl.LeftLit : s.Assumed == Side.Left && phase;
+        _lampRight.Lit = s.Telemetry is { } tr ? tr.RightLit : s.Assumed == Side.Right && phase;
 
         _lblState.Text = s.Desired switch
         {
@@ -568,9 +587,19 @@ public sealed class MainForm : Form
             _ => "au centre",
         } + (s.Desired != s.Assumed && s.Game == null ? " · en attente du jeu" : "");
         _lblAction.Text = s.LastAction == "—" ? "Aucune touche envoyée" : "Dernière touche : " + s.LastAction;
-        _lblLights.Visible = s.LightsEnabled;
+        _lblLights.Visible = _lightLamps.Visible = s.LightsEnabled;
         if (s.LightsEnabled)
-            _lblLights.Text = "Feux : " + s.Ring switch
+        {
+            // État des feux dans le jeu : réel pour les pleins phares avec la télémétrie, supposé sinon.
+            bool high = s.Telemetry is { } th ? th.High
+                : s.ShownFlash || (s.ShownHighInCycle ? s.ShownCycle == LightState.High : s.ShownHigh && s.ShownCycle == LightState.Low);
+            bool low = s.Telemetry is { Low: { } tlow } ? tlow : s.ShownCycle is LightState.Low or LightState.High;
+            _lampParking.Lit = s.ShownCycle == LightState.Parking;
+            _lampLow.Lit = low;
+            _lampHigh.Lit = high;
+        }
+        if (s.LightsEnabled)
+            _lblLights.Text = "Commodo : " + s.Ring switch
             {
                 LightState.Parking => "veilleuses",
                 LightState.Low => "croisement",
@@ -581,6 +610,17 @@ public sealed class MainForm : Form
                 BeamPosition.Flash => " · appel de phare",
                 _ => "",
             };
+
+        _lblTelemetry.Visible = _shownGame != null && Config.IsBeamNg(_shownGame);
+        if (_lblTelemetry.Visible)
+        {
+            (_lblTelemetry.Text, _lblTelemetry.ForeColor) = s.TelemetryError is { } err
+                ? ($"Télémétrie OutGauge : {err}.", Theme.Warning)
+                : s.Telemetry is { } tm
+                    ? ($"Télémétrie OutGauge : reçue (voyants 0x{tm.ShowLights:X4}).", Theme.Accent)
+                    : ($"Télémétrie OutGauge : en attente. Dans BeamNG : Options → Autres → Protocoles → OutGauge, "
+                       + $"adresse 127.0.0.1, port {s.TelemetryPort}.", Theme.Muted);
+        }
 
         string? warning = s.Devices == 0 ? "Aucun périphérique de jeu détecté."
             : s.Game is { Ready: false } g ? $"Touches de clignotant non définies pour {Config.ShortName(g)}."

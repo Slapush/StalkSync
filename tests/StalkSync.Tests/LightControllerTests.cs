@@ -98,4 +98,36 @@ public class LightControllerTests
         Assert.Equal(LightAction.None, c.Update(0, LightState.Low, BeamPosition.High, Trucks, false));
         Assert.Equal(LightState.Off, c.AssumedCycle);
     }
+
+    [Fact]
+    public void Telemetry_high_beam_corrects_beamng_cycle()
+    {
+        var c = new LightController();
+        c.Observe(5000, BeamNg.Cycle, high: true, low: null);
+        Assert.Equal(LightState.High, c.AssumedCycle);
+        c.Observe(6000, BeamNg.Cycle, high: false, low: null);
+        Assert.Equal(LightState.Low, c.AssumedCycle);
+        c.Observe(7000, BeamNg.Cycle, high: false, low: false);
+        Assert.Equal(LightState.Off, c.AssumedCycle);
+    }
+
+    [Fact]
+    public void Telemetry_ignored_right_after_a_press_and_during_flash()
+    {
+        var c = new LightController();
+        Assert.Equal(LightAction.Cycle, c.Update(0, LightState.Low, BeamPosition.Neutral, BeamNg, true));
+        c.Observe(200, BeamNg.Cycle, high: false, low: false);
+        Assert.Equal(LightState.Low, c.AssumedCycle);
+        Assert.Equal(LightAction.FlashPress, c.Update(1000, LightState.Low, BeamPosition.Flash, BeamNg, true));
+        c.Observe(3000, BeamNg.Cycle, high: true, low: true);
+        Assert.Equal(LightState.Low, c.AssumedCycle);
+    }
+
+    [Fact]
+    public void Telemetry_sets_separate_high_beam_state()
+    {
+        var c = new LightController();
+        c.Observe(5000, Trucks.Cycle, high: true, low: null);
+        Assert.True(c.AssumedHigh);
+    }
 }

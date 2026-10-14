@@ -71,6 +71,11 @@ public sealed class Config
     public List<GameProfile> Games { get; set; } = [];
     public BlinkerSettings Blinker { get; set; } = new();
     public bool StartMinimized { get; set; }
+    /// <summary>Port UDP sur lequel BeamNG.drive envoie sa télémétrie OutGauge.</summary>
+    public int OutGaugePort { get; set; } = 4444;
+
+    public static bool IsBeamNg(GameProfile game) => game.Builtin && game.Name == BeamNgName;
+    private const string BeamNgName = "BeamNG.drive";
 
     // Anciennes versions : touches uniques pour ETS2 / ATS, reprises dans leur profil au chargement.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public KeyBinding? KeyLeft { get; set; }

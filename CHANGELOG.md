@@ -1,5 +1,10 @@
 # Changements
 
+## 0.4.0-beta.3 (pré-version de test)
+- Télémétrie BeamNG.drive (OutGauge) : l'état réel des clignotants et des pleins phares recale StalkSync,
+  les voyants clignotent au rythme du jeu, et rien n'est envoyé quand les warnings sont allumés.
+- Voyants de phares sur le tableau de bord : veilleuses, croisement, pleins phares.
+
 ## 0.4.0-beta.2 (pré-version de test)
 - Fenêtre en largeur sur trois colonnes : elle tient sur un écran 1080p.
 - Les boutons du commodo s'affichent en court (« Bouton 10 »), le périphérique une seule fois.

@@ -50,7 +50,10 @@ public sealed record LightKeys(IReadOnlyList<LightState> Cycle, bool HasCycle, b
 public sealed class LightController
 {
     private readonly int _cooldownMs;
-    private long _lastTap = -1_000_000;
+    private long _lastTap = -1_000_000, _lastFlash = -1_000_000;
+
+    /// <summary>Délai pendant lequel la télémétrie est ignorée après un appui (le jeu met un moment à suivre).</summary>
+    public const int SyncGraceMs = 800;
 
     public LightController(int cooldownMs = 250, LightState assumedCycle = LightState.Off, bool assumedHigh = false)
     {
@@ -73,6 +76,7 @@ public sealed class LightController
         if (flash != FlashDown)
         {
             FlashDown = flash;
+            _lastFlash = nowMs;
             return flash ? LightAction.FlashPress : LightAction.FlashRelease;
         }
         if (!canSend || nowMs - _lastTap < _cooldownMs) return LightAction.None;
@@ -106,6 +110,26 @@ public sealed class LightController
             }
         }
         return LightAction.None;
+    }
+
+    /// <summary>
+    /// Recale l'état supposé sur l'état réel des pleins phares lu en télémétrie
+    /// (et des feux de croisement si le jeu les fournit).
+    /// </summary>
+    public void Observe(long nowMs, IReadOnlyList<LightState> cycle, bool high, bool? low)
+    {
+        if (FlashDown || nowMs - _lastTap < SyncGraceMs || nowMs - _lastFlash < SyncGraceMs) return;
+        if (cycle.Contains(LightState.High))
+        {
+            if (high) AssumedCycle = LightState.High;
+            else if (low == true) AssumedCycle = LightState.Low;
+            else if (low == false && AssumedCycle is LightState.Low or LightState.High)
+                AssumedCycle = LightState.Off;
+            // Sans info sur le croisement : on se croyait en pleins phares à tort, le jeu est resté un cran avant.
+            else if (low == null && AssumedCycle == LightState.High) AssumedCycle = LightState.Low;
+        }
+        else
+            AssumedHigh = high;
     }
 
     /// <summary>La touche d'appel a été relâchée de l'extérieur (changement de touche, fermeture).</summary>

@@ -36,6 +36,12 @@ public sealed class BlinkerController
     /// <summary>Durée approximative d'un clignotement dans ETS2 / ATS.</summary>
     public const int BlinkPeriodMs = 700;
 
+    /// <summary>
+    /// Après un appui, la télémétrie met un moment à refléter le jeu (un clignotant éteint semble encore actif
+    /// jusqu'à la fin de son dernier clignotement) : on l'ignore pendant ce délai.
+    /// </summary>
+    public const int SyncGraceMs = 1500;
+
     private readonly BlinkerSettings _s;
     private Side _lastStalk = Side.Off;
     private long _pressStart;
@@ -55,6 +61,12 @@ public sealed class BlinkerController
     public Side Assumed { get; private set; }
 
     public bool ComfortActive => _comfort;
+
+    /// <summary>Recale l'état supposé sur l'état réel lu en télémétrie.</summary>
+    public void Observe(long nowMs, Side game)
+    {
+        if (nowMs - _lastTap >= SyncGraceMs) Assumed = game;
+    }
 
     public BlinkerAction Update(long nowMs, bool leftPressed, bool rightPressed, bool canSend)
     {
